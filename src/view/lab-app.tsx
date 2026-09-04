@@ -1,81 +1,87 @@
+/**
+ * Lab chrome — buttons, captions, telemetry.
+ *
+ * What: The React View. Constructs a LabViewModel, never a SimEngine.
+ * Why: A critic auditing gravity should not have to read this file. Play,
+ * pause, speed, and which-run are commands on the ViewModel. This file
+ * paints whatever getState() returns.
+ */
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { ChevronDown, ChevronRight, Info, Pause, Play, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { TowerCanvas } from "@/components/lab/tower-canvas";
-import { playImpact, playInitiation, unlockAudio } from "@/lib/sim/audio";
-import { SimEngine } from "@/lib/sim/engine";
-import { CLAIM, PATH, SCENARIOS, scenarioById } from "@/lib/sim/scenarios";
-import type { LogEvent, Phase, Scenario, SimSnapshot } from "@/lib/sim/types";
+import { TowerCanvas } from "@/view/tower-canvas";
+import { playImpact, playInitiation, unlockAudio } from "@/view/audio";
+import { CLAIM, PATH, SCENARIOS, scenarioById } from "@/model/scenarios";
+import type { LogEvent, Phase, Scenario, SimSnapshot } from "@/model/types";
+import { LabViewModel, type LabViewState } from "@/viewmodel/LabViewModel";
 import { cn } from "@/lib/utils";
 
 const DEFAULT_ID = "bonfire";
 
 export function LabApp() {
-  const engineRef = useRef<SimEngine | null>(null);
-  const [snap, setSnap] = useState<SimSnapshot | null>(null);
-  const [scenarioId, setScenarioId] = useState(DEFAULT_ID);
-  const [speed, setSpeed] = useState(() => scenarioById(DEFAULT_ID).defaultSpeed);
+  const vmRef = useRef<LabViewModel | null>(null);
+  const [view, setView] = useState<LabViewState | null>(null);
   const [notesOpen, setNotesOpen] = useState(false);
   const lastPhase = useRef<Phase>("idle");
 
-  useEffect(() => {
-    const start = scenarioById(DEFAULT_ID);
-    const engine = new SimEngine(start);
-    engine.setSpeed(start.defaultSpeed);
-    engine.reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    engineRef.current = engine;
-    setSnap(engine.snapshot());
-    (window as unknown as { __sim?: SimEngine; __scenarios?: typeof SCENARIOS }).__sim = engine;
-    (window as unknown as { __scenarios?: typeof SCENARIOS }).__scenarios = SCENARIOS;
-    return () => {
-      engineRef.current = null;
-    };
+  const push = useCallback((vm: LabViewModel) => {
+    setView(vm.getState());
   }, []);
 
+  useEffect(() => {
+    const vm = new LabViewModel(DEFAULT_ID, {
+      reducedMotion: window.matchMedia("(prefers-reduced-motion: reduce)").matches,
+    });
+    vmRef.current = vm;
+    push(vm);
+    const w = window as unknown as {
+      __vm?: LabViewModel;
+      __sim?: LabViewModel["engine"];
+      __scenarios?: typeof SCENARIOS;
+    };
+    w.__vm = vm;
+    w.__sim = vm.engine;
+    w.__scenarios = SCENARIOS;
+    return () => {
+      vmRef.current = null;
+    };
+  }, [push]);
+
   const applyScenario = useCallback((s: Scenario) => {
-    const engine = engineRef.current;
-    if (!engine) return;
+    const vm = vmRef.current;
+    if (!vm) return;
     unlockAudio();
-    setScenarioId(s.id);
-    setSpeed(s.defaultSpeed);
-    engine.reset(s);
-    engine.setSpeed(s.defaultSpeed);
+    vm.selectScenario(s.id);
     lastPhase.current = "idle";
-    setSnap(engine.snapshot());
-  }, []);
+    push(vm);
+  }, [push]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement | null)?.tagName;
       if (tag === "INPUT" || tag === "TEXTAREA") return;
-      const engine = engineRef.current;
-      if (!engine) return;
+      const vm = vmRef.current;
+      if (!vm) return;
       if (e.code === "Space") {
         e.preventDefault();
         unlockAudio();
-        if (engine.phase === "settled") {
-          engine.reset(scenarioById(scenarioId));
-          engine.setSpeed(speed);
-          lastPhase.current = "idle";
-        } else if (engine.paused || engine.phase === "idle") {
-          engine.play();
-        } else {
-          engine.pause();
-        }
-        setSnap(engine.snapshot());
+        vm.togglePlay();
+        lastPhase.current = vm.snapshot().phase;
+        push(vm);
       } else if (e.key === "r" || e.key === "R") {
-        engine.reset(scenarioById(scenarioId));
-        engine.setSpeed(speed);
+        vm.reset();
         lastPhase.current = "idle";
-        setSnap(engine.snapshot());
+        push(vm);
       } else if (e.key >= "1" && e.key <= "9") {
-        const s = SCENARIOS[Number(e.key) - 1];
-        if (s) applyScenario(s);
+        if (vm.selectScenarioByIndex(Number(e.key) - 1)) {
+          lastPhase.current = "idle";
+          push(vm);
+        }
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [scenarioId, speed, applyScenario]);
+  }, [push]);
 
   const onSnap = useCallback((s: SimSnapshot) => {
     if (s.phase !== lastPhase.current) {
@@ -83,45 +89,43 @@ export function LabApp() {
       if (s.phase === "collapse") playInitiation();
       lastPhase.current = s.phase;
     }
-    setSnap(s);
-  }, []);
+    const vm = vmRef.current;
+    if (vm) push(vm);
+  }, [push]);
 
   function togglePlay() {
-    const engine = engineRef.current;
-    if (!engine) return;
+    const vm = vmRef.current;
+    if (!vm) return;
     unlockAudio();
-    if (engine.phase === "settled") {
-      engine.reset(scenarioById(scenarioId));
-      engine.setSpeed(speed);
-      lastPhase.current = "idle";
-    } else if (engine.paused || engine.phase === "idle") {
-      engine.play();
-    } else {
-      engine.pause();
-    }
-    setSnap(engine.snapshot());
+    vm.togglePlay();
+    lastPhase.current = vm.snapshot().phase;
+    push(vm);
   }
 
   function reset() {
-    const engine = engineRef.current;
-    if (!engine) return;
-    engine.reset(scenarioById(scenarioId));
-    engine.setSpeed(speed);
+    const vm = vmRef.current;
+    if (!vm) return;
+    vm.reset();
     lastPhase.current = "idle";
-    setSnap(engine.snapshot());
+    push(vm);
   }
 
   function changeSpeed(v: number) {
-    setSpeed(v);
-    engineRef.current?.setSpeed(v);
+    const vm = vmRef.current;
+    if (!vm) return;
+    vm.setSpeed(v);
+    push(vm);
   }
 
-  const scenario = scenarioById(scenarioId);
+  const snap = view?.snap ?? null;
+  const scenario = view?.scenario ?? scenarioById(DEFAULT_ID);
+  const scenarioId = view?.scenarioId ?? DEFAULT_ID;
+  const speed = view?.speed ?? scenario.defaultSpeed;
   const phase = snap?.phase ?? "idle";
-  const playing = snap ? !snap.paused && phase !== "idle" && phase !== "settled" : false;
-  const midRun = phase !== "idle" && phase !== "settled";
-  const next = scenario.nextId ? scenarioById(scenario.nextId) : null;
-  const latest = snap?.events.length ? snap.events[snap.events.length - 1] : null;
+  const playing = view?.playing ?? false;
+  const midRun = view?.midRun ?? false;
+  const next = view?.next ?? null;
+  const latest = view?.latest ?? null;
 
   return (
     <div className="flex min-h-dvh flex-col bg-bg text-fg lg:h-dvh">
@@ -180,7 +184,7 @@ export function LabApp() {
         <section className="flex min-h-0 flex-col gap-2 p-3 md:p-4 lg:col-span-3">
           <Caption event={latest} idle={phase === "idle"} />
           <div className="relative min-h-[40rem] flex-1 lg:min-h-0">
-            <TowerCanvas engineRef={engineRef} snap={snap} onSnap={onSnap} className="h-full min-h-[40rem] lg:min-h-0" />
+            <TowerCanvas vmRef={vmRef} snap={snap} onSnap={onSnap} className="h-full min-h-[40rem] lg:min-h-0" />
             {phase === "idle" ? (
               <BriefingOverlay scenario={scenario} onIgnite={togglePlay} />
             ) : null}
@@ -198,7 +202,7 @@ export function LabApp() {
             playing={playing}
             midRun={midRun}
             snap={snap}
-            wood={scenario.shape === "bonfire" || scenario.shape === "house"}
+            wood={view?.wood ?? false}
             speed={speed}
             onPlay={togglePlay}
             onReset={reset}

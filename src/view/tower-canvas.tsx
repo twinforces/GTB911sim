@@ -1,18 +1,26 @@
+/**
+ * 4-pane host.
+ *
+ * What: Owns the RAF loop and the WebGL canvas. Calls vm.advance(dt) so
+ * time only moves through the ViewModel. Reads vm.engine to draw.
+ * Why the View still sees the engine: THREE needs live piece positions.
+ * It must not `new SimEngine` and it must not call `engine.step`.
+ */
 import { useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
-import { STEP } from "@/lib/sim/constants";
-import type { SimEngine } from "@/lib/sim/engine";
-import { World3D, type PaneRect } from "@/lib/sim/scene3d";
-import type { Bubble, SimSnapshot } from "@/lib/sim/types";
+import { STEP } from "@/model/constants";
+import { World3D, type PaneRect } from "@/view/scene3d";
+import type { Bubble, SimSnapshot } from "@/model/types";
+import type { LabViewModel } from "@/viewmodel/LabViewModel";
 import { cn } from "@/lib/utils";
 
 interface Props {
-  engineRef: RefObject<SimEngine | null>;
+  vmRef: RefObject<LabViewModel | null>;
   snap: SimSnapshot | null;
   onSnap: (s: SimSnapshot) => void;
   className?: string;
 }
 
-export function TowerCanvas({ engineRef, snap, onSnap, className }: Props) {
+export function TowerCanvas({ vmRef, snap, onSnap, className }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const frontSlot = useRef<HTMLDivElement>(null);
@@ -49,17 +57,17 @@ export function TowerCanvas({ engineRef, snap, onSnap, className }: Props) {
 
     const loop = (now: number) => {
       if (cancelled) return;
-      const engine = engineRef.current;
+      const vm = vmRef.current;
       const cssW = host.clientWidth;
       const cssH = host.clientHeight;
       let dt = (now - last) / 1000;
       last = now;
       if (dt > 0.1) dt = 0.1;
 
-      if (engine && cssW > 4 && cssH > 4) {
+      if (vm && cssW > 4 && cssH > 4) {
         acc += dt;
         while (acc >= STEP) {
-          engine.step(STEP);
+          vm.advance(STEP);
           acc -= STEP;
         }
         const front = paneOf(frontSlot.current);
@@ -67,7 +75,7 @@ export function TowerCanvas({ engineRef, snap, onSnap, className }: Props) {
         const zoom = paneOf(zoomSlot.current);
         const top = paneOf(topSlot.current);
         zoomPane.current = zoom;
-        world.render(engine, cssW, cssH, { front, iso, zoom, top }, now / 1000);
+        world.render(vm.engine, cssW, cssH, { front, iso, zoom, top }, now / 1000);
         frames += 1;
         if (world.ready && frames >= 2 && !readyRef.current) {
           readyRef.current = true;
@@ -76,7 +84,7 @@ export function TowerCanvas({ engineRef, snap, onSnap, className }: Props) {
         hud += dt;
         if (hud > 0.1) {
           hud = 0;
-          onSnapRef.current(engine.snapshot());
+          onSnapRef.current(vm.snapshot());
         }
       }
       raf = requestAnimationFrame(loop);
@@ -95,7 +103,7 @@ export function TowerCanvas({ engineRef, snap, onSnap, className }: Props) {
       world.dispose();
       worldRef.current = null;
     };
-  }, [engineRef]);
+  }, [vmRef]);
 
   const bubbles = snap?.bubbles ?? [];
   const loadingLabel =

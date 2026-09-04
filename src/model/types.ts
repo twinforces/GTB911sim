@@ -1,3 +1,15 @@
+/**
+ * Shared types for the Model.
+ *
+ * What: The shapes of members, floors, snapshots, scenarios.
+ * Why they are data-only: a `Piece` is a rectangle with mass, temperature,
+ * fuel, and a velocity. It is not a mesh. The View may draw it; it must
+ * not add fields the integrator does not know about.
+ *
+ * `SimSnapshot` is the Model’s report to the ViewModel. If a number appears
+ * on the telemetry strip, it came from here.
+ */
+
 export type Phase = "idle" | "approach" | "fire" | "collapse" | "settled";
 
 export type FloorState = "stacked" | "block" | "crushed";
@@ -43,6 +55,13 @@ export interface Floor {
   rotJitter: number;
 }
 
+/**
+ * One physical member.
+ *
+ * `dynamic === false` means it is still in the structure. Gravity does not
+ * integrate locked members — that is the “it stayed a house” / “it stayed a
+ * tower” state. Unlocking is a physics event (`unlockPiece`), not a keyframe.
+ */
 export interface Piece {
   id: number;
   kind: PieceKind;
@@ -61,9 +80,9 @@ export interface Piece {
   mass: number;
   temp: number;
   fuel: number;
+  intact: number;
   burning: number;
   stripped: number;
-  intact: number;
   failed: boolean;
   dynamic: boolean;
   layer: number;
@@ -163,6 +182,7 @@ export interface SimSnapshot {
   clock: string;
   rotationDeg: number;
   maxRotationDeg: number;
+  /** Center-of-gravity offset from midline, metres. The claim lives or dies on this. */
   cgOffsetM: number;
   halfWidth: number;
   cgInside: boolean;
@@ -173,6 +193,7 @@ export interface SimSnapshot {
   keJ: number;
   fallingMassKg: number;
   initiationMin: number | null;
+  /** NIST NCSTAR 1 comparison, *not* a target the integrator is forced to hit. */
   nistMinutes: number;
   faces: {
     impact: FaceStatus;

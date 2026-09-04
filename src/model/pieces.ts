@@ -1,7 +1,24 @@
-import { G } from "./constants";
-import { eFactor, fyFactor } from "./steel";
-import type { Piece, Pit, Scenario } from "./types";
-import { woodFy } from "./wood";
+/**
+ * Piece world — bonfire, houses, apartment.
+ *
+ * What: Build discrete members, ignite one of them, heat them, walk fire to
+ * neighbors, unlock a member when remaining strength cannot carry the load,
+ * then integrate gravity and collisions.
+ * Why a piece world at all: the truther claim is a scale error ("a tower is
+ * a chimney"). A log crib and a house are things you have seen fall into
+ * their own footprint. Same three laws, smaller stack.
+ *
+ * Accusation map:
+ *   painted-on fire          -> ignitePieces, spreadPieces
+ *   tree lights the house    -> ignitePieces (tree only) + the couch gate in spreadPieces
+ *   demolition kick          -> unlockPiece(..., drop=true) zeroes vx, vz
+ *   gravity faked            -> integratePieces: vy -= G * dt
+ *   houses never drop        -> evaluatePieces house branch + piecesSettled
+ */
+import { G } from "./constants.ts";
+import { eFactor, fyFactor } from "./steel.ts";
+import type { Piece, Pit, Scenario } from "./types.ts";
+import { woodFy } from "./wood.ts";
 
 function hash(n: number): number {
   const x = Math.sin(n * 127.1) * 43758.5453;
@@ -192,6 +209,13 @@ function buildApartment(s: Scenario): { pieces: Piece[]; pit: Pit | null } {
   return { pieces, pit: null };
 }
 
+/**
+ * What: Light ONE thing.
+ * Why not a whole wall: a painted-on fire is the cheat we are accused of.
+ * Bonfire = lowest log. House = the Christmas tree, nothing else.
+ * Apartment = one corner unit on the ignition storey.
+ * Towers are handled in SimEngine, not here.
+ */
 export function ignitePieces(pieces: Piece[], s: Scenario): void {
   if (s.noFire) return;
   if (s.shape === "bonfire") {
@@ -252,6 +276,12 @@ export function fyOf(p: Piece): number {
   return p.material === "wood" ? woodFy(p.temp) * p.intact : fyFactor(p.temp) * p.intact;
 }
 
+/**
+ * What: Each burning member heats toward a gas temperature and loses fuel.
+ * Why wood `intact` drops here: charcoal is section loss. A stud that is
+ * 30% charcoal cannot carry what a green stud can. Colour is not strength;
+ * `intact` is.
+ */
 export function heatPieces(pieces: Piece[], s: Scenario, dt: number): void {
   const heatMul = s.heatRate;
   for (const p of pieces) {
@@ -330,6 +360,22 @@ export function restackBonfire(pieces: Piece[], pit: Pit): void {
   }
 }
 
+/**
+ * Neighbor heat.
+ *
+ * What: A burning member warms every other member within a few metres.
+ * When the neighbor's own temperature passes its ignition point, that
+ * neighbor lights. Distance is 3D. Heat prefers "up."
+ *
+ * CRITIC: "The left wall just catches fire."
+ * House gate: the tree cannot heat anything except the couch until the
+ * couch is actually lit (`couchLit`). Tree -> couch -> room is enforced
+ * here, not in the renderer.
+ *
+ * CRITIC: "maxD is a fudge so fire jumps."
+ * Stud spacing in the house is ~0.6-0.8 m. maxD ~2.4 m is "across a room",
+ * not "the far gable at t=0". If fire reaches the far side it walked.
+ */
 export function spreadPieces(pieces: Piece[], s: Scenario, dt: number): void {
   if (s.noFire) return;
   const horiz = s.fireSpread;
@@ -404,7 +450,16 @@ function hasSupport(p: Piece, locked: Piece[], bonfire: boolean): boolean {
   return false;
 }
 
-function unlock(p: Piece, drop = false): void {
+/**
+ * Unlock a member so gravity may integrate it.
+ *
+ * What: `dynamic = true`. If `drop` (houses, apartments, impact unlocks,
+ * logs) then vx = vz = 0 and vy is a tiny downward nudge.
+ * Why drop-only: giving joists a lateral kick looked like a demolition
+ * charge. Things made of pieces fall down. They do not jump out of the
+ * footprint. Tests assert vx === 0 when drop is true.
+ */
+export function unlockPiece(p: Piece, drop = false): void {
   p.failed = true;
   p.dynamic = true;
   if (p.kind === "log" || drop) {
@@ -419,6 +474,18 @@ function unlock(p: Piece, drop = false): void {
   }
 }
 
+/**
+ * What: For each still-locked member, is remaining strength enough?
+ * Why house thresholds wait for charcoal: locking everyone so they would
+ * not "pop out" also stopped the house burning down. The fix is not a
+ * sideways kick — it is "char, then drop in the footprint."
+ *
+ * House rules of thumb (not hidden in the renderer):
+ *   studs  fail once intact < 0.30
+ *   joists/plate < 0.28
+ *   roof drops after ~35% of nearby studs are dead, or it itself is charcoal
+ *   walls linger until intact < 0.16 so the roof can fall in first
+ */
 export function evaluatePieces(pieces: Piece[], s: Scenario): Piece | null {
   let first: Piece | null = null;
   const locked = pieces.filter((p) => !p.dynamic);
@@ -455,7 +522,7 @@ export function evaluatePieces(pieces: Piece[], s: Scenario): Piece | null {
     if (!hasSupport(p, locked, s.shape === "bonfire")) {
       const anyLoose = pieces.some((q) => q.dynamic);
       if (!anyLoose && p.temp < 180) continue;
-      unlock(p, s.shape === "house" || s.shape === "apartment");
+      unlockPiece(p, s.shape === "house" || s.shape === "apartment");
       if (!first) first = p;
       continue;
     }
@@ -488,7 +555,7 @@ export function evaluatePieces(pieces: Piece[], s: Scenario): Piece | null {
     const vert = p.kind === "stud" || p.kind === "column";
     const cap = fy * em * (vert ? 10 : 5) * p.mass * G * (vert ? 1.8 : 1);
     if ((load > cap && fy < 0.85) || p.intact < 0.28) {
-      unlock(p, s.shape === "house" || s.shape === "apartment");
+      unlockPiece(p, s.shape === "house" || s.shape === "apartment");
       if (!first) first = p;
     }
   }
@@ -577,6 +644,15 @@ function capacityN(p: Piece): number {
   return fy * em * (vert ? 16 : 6) * p.mass * G;
 }
 
+/**
+ * Gravity + collisions. Always 1x. Fire Speed does not call this faster.
+ *
+ * What: For every dynamic piece, vy -= G * dt, then move, then hit the
+ * pit / ground / other pieces (SAT).
+ * CRITIC: "You damped vx so it cannot tip."
+ * Horizontal velocity is damped (wood on wood, not ice). Vertical is
+ * gravity. A hinge tip-over needs a standing shaft, not rubble.
+ */
 export function integratePieces(pieces: Piece[], pit: Pit | null, dt: number, width: number): number {
   let ke = 0;
   const dyn = pieces.filter((p) => p.dynamic);
@@ -697,12 +773,16 @@ export function integratePieces(pieces: Piece[], pit: Pit | null, dt: number, wi
     }
   }
   for (const q of toUnlock) {
-    if (!q.dynamic) unlock(q, true);
+    if (!q.dynamic) unlockPiece(q, true);
   }
 
   return ke;
 }
 
+/**
+ * Mass-weighted center of gravity. Not a drawn line that we place by hand.
+ * The claim "it had to tip" is "CGrav left the base." This is that number.
+ */
 export function pieceCgrav(pieces: Piece[]): { x: number; y: number; mass: number } {
   let m = 0;
   let x = 0;
@@ -716,6 +796,13 @@ export function pieceCgrav(pieces: Piece[]): { x: number; y: number; mass: numbe
   return { x: x / m, y: y / m, mass: m };
 }
 
+/**
+ * What: Are we done?
+ * Why the roof check: settling while the roof is still a roof is how we
+ * shipped "houses don't burn down any more." A house is not settled until
+ * a majority of roof pieces are down, or there is no roof.
+ * Tree and couch do not count as structure.
+ */
 export function piecesSettled(pieces: Piece[]): boolean {
   const dyn = pieces.filter((p) => p.dynamic);
   if (dyn.length < 4) return false;

@@ -1,8 +1,12 @@
-import { ANTENNA, COLS, COL_X } from "./constants";
-import type { SimEngine } from "./engine";
-import { rgbCss, steelRgb } from "./steel";
-import type { Particle, Piece } from "./types";
-import { woodRgb } from "./wood";
+/**
+ * 2D camera helpers the 3D view still uses for floor transforms.
+ * Presentation math. Not strength, not gravity.
+ */
+import { ANTENNA, COLS, COL_X } from "@/model/constants";
+import type { SimEngine } from "@/model/engine";
+import { rgbCss, steelRgb } from "@/model/steel";
+import type { Particle, Piece } from "@/model/types";
+import { woodRgb } from "@/model/wood";
 
 export interface View {
   x: number;

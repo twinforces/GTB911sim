@@ -16,11 +16,19 @@ Critics: start here, then open the tiny file that matches the accusation.
 
 | Layer | Where | What you are looking at |
 | --- | --- | --- |
-| **Model** | `src/model/` | Physics. No React. No WebGL. Numbers and members. |
-| **ViewModel** | `src/viewmodel/` | Play / pause / speed / which run. Turns the model into labels the UI shows. |
-| **View** | `src/view/` | Buttons, captions, the 3D canvas. Pretty. Not the argument. |
+| **Model** | [`src/model/`](src/model/) | Physics. No React. No WebGL. Numbers and members. Start at [`src/model/README.md`](src/model/README.md). |
+| **ViewModel** | [`src/viewmodel/`](src/viewmodel/) | Play / pause / speed / which run. Turns the model into labels the UI shows. The View never constructs `SimEngine`. |
+| **View** | [`src/view/`](src/view/) | Buttons, captions, the 3D canvas. Pretty. Not the argument. |
 
-If you think the fire is painted on, you want `src/model/pieces.ts` (`spreadPieces`) and `src/model/engine.ts` (`spreadFire`). If you think gravity is faked, you want `src/model/constants.ts` (`G = 9.81`) and `integratePieces`. If you think Fire Speed also speeds up the collapse, you want `src/model/engine.ts` `step()` — heating is scaled, falling is not.
+If you think the fire is painted on, you want [`src/model/pieces.ts`](src/model/pieces.ts) (`spreadPieces`) and [`src/model/engine.ts`](src/model/engine.ts) (`spreadFire`). If you think gravity is faked, you want [`src/model/constants.ts`](src/model/constants.ts) (`G = 9.81`) and `integratePieces`. If you think Fire Speed also speeds up the collapse, you want `SimEngine.step()` — heating is scaled, falling is not.
+
+Tests that prove those three claims live next to the code:
+
+- `src/model/constants.test.ts` — `G === 9.81`
+- `src/model/steel.test.ts` — Eurocode 3 knots, including 600 °C → 0.47
+- `src/model/pieces.test.ts` — tree-only ignition, couch gate, drop-only unlock, gravity
+- `src/model/engine.test.ts` — Fire Speed heats; it does not add gravity
+- `src/viewmodel/LabViewModel.test.ts` — play / pause / speed / which-run
 
 ## How to run
 
@@ -35,7 +43,7 @@ Dev server binds `0.0.0.0:8080` (this project started in Grok Build).
 
 ## Tests
 
-`npm test` runs Model and ViewModel unit tests. Those are the layers you can prove wrong in a terminal without a GPU.
+`npm test` runs Model and ViewModel unit tests plus the platform script tests. Those are the layers you can prove wrong in a terminal without a GPU.
 
 ## License
 

@@ -1,4 +1,18 @@
-import { interp } from "./steel";
+/**
+ * Wood strength vs temperature, and charcoal colour.
+ *
+ * What: Remaining fraction of timber capacity as it heats, plus the colour
+ * ramp the View uses for char.
+ * Why a separate file from steel: wood does not follow Eurocode 3. It chars.
+ * Section is eaten (`intact` in pieces.ts) *and* the remaining wood is
+ * weaker with temperature. Two mechanisms, both required for a house to
+ * burn down instead of “stay a house.”
+ *
+ * CRITIC: “You set wood to zero so the roof would drop.”
+ * 250 °C → half. 500 °C → none. That is the published wood-in-fire range,
+ * not a knob on the house scenario. Char (section loss) is `intact`, here.
+ */
+import { interp } from "./steel.ts";
 
 /** Remaining wood strength vs °C. Char eats section separately. */
 const WOOD_FY: readonly (readonly [number, number])[] = [

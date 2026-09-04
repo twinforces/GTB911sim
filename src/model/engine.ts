@@ -1,4 +1,24 @@
-import { COLS, COL_X, G, SF, TRIB } from "./constants";
+/**
+ * SimEngine — the orchestrator.
+ *
+ * What: Owns the current Scenario, the piece list or the floor stack, and
+ * advances one Euler slice when asked. Play / pause / speed are methods on
+ * this class; the ViewModel is the only caller the View is allowed to use.
+ * Why a class instead of a function: the world is mutable state (temps,
+ * velocities, which members have unlocked). A snapshot is a frozen report.
+ *
+ * Two worlds, one object:
+ *   pieces  — bonfire / house / apartment (see pieces.ts)
+ *   tower   — lumped 110-storey tube (this file: stepFire, evaluateStructure, crush)
+ *
+ * Accusation map:
+ *   Fire Speed speeds collapse -> step(): heat uses speed, motion does not
+ *   tower is pre-leaned        -> standingLean() returns 0
+ *   fire painted on floors     -> spreadFire / climbMinutes (one storey at a time)
+ *   NIST time is a forced hit  -> evaluateStructure uses it as a comparison, not a keyframe
+ *   CGrav is decoration        -> cgOffset() / pieceCgrav
+ */
+import { COLS, COL_X, G, SF, TRIB } from "./constants.ts";
 import {
   buildPieces,
   evaluatePieces,
@@ -11,8 +31,8 @@ import {
   piecesSettled,
   restackBonfire,
   spreadPieces,
-} from "./pieces";
-import { eFactor, fyFactor } from "./steel";
+} from "./pieces.ts";
+import { eFactor, fyFactor } from "./steel.ts";
 import type {
   Block,
   Bubble,
@@ -29,7 +49,7 @@ import type {
   Probe,
   Scenario,
   SimSnapshot,
-} from "./types";
+} from "./types.ts";
 
 const PARTICLE_CAP = 700;
 
@@ -286,10 +306,25 @@ export class SimEngine {
     this.paused = true;
   }
 
+  /**
+   * Fire Speed. Heating time-scale only.
+   * Clamp 1..240 so a slider cannot zero the step or run a 1000x "video."
+   */
   setSpeed(v: number): void {
     this.speed = clamp(v, 1, 240);
   }
 
+  /**
+   * One wall-clock slice.
+   *
+   * CRITIC: "Fire Speed also speeds up the collapse."
+   * Look at the two budgets:
+   *   heat:  remain = d * this.speed   -> stepPieceHeat / stepFire
+   *   motion: stepPieceMotion(d) / stepCollapse(d)   <- no speed
+   * Falling always integrates at 1x. Tests in engine.test.ts compare a
+   * 8x run to a 80x run over the same wall-clock second: hottest member
+   * is hotter at 80x, vy of still-locked members is still ~0.
+   */
   step(dt: number): void {
     const d = Math.min(dt, 0.1);
     this.stepCamera(d);
@@ -801,6 +836,13 @@ export class SimEngine {
     this.evaluateStructure();
   }
 
+  /**
+   * Minutes of heating before the next storey is allowed to light.
+   * What: (NIST minutes * 0.88) / (impact belt + a few floors).
+   * Why: North stood ~102 min, South ~56. The hour is a climbing front,
+   * not a single flashover of 110 floors. This is a time *scale* for the
+   * teaching model, not a keyframe that forces initiation at 102:00.
+   */
   private climbMinutes(): number {
     const s = this.scenario;
     if (s.nistMinutes <= 0) return 8;
@@ -825,6 +867,15 @@ export class SimEngine {
     return any;
   }
 
+  /**
+   * Tower fire. Same neighbor-heat idea as spreadPieces, on five column groups.
+   * Horizontal leak to adjacent groups; a little downward; upward is gated
+   * by climbMinutes so the fire walks one storey at a time.
+   *
+   * CRITIC: "You lit the whole shaft."
+   * `unlocked = impactLo + floor(minutes / climbMin)`. Storey 94 cannot
+   * flash because 93 is pretty. It flashes when the clock has paid for it.
+   */
   private spreadFire(dt: number): void {
     const s = this.scenario;
     const spread = s.fireSpread;
@@ -998,6 +1049,18 @@ export class SimEngine {
     return Math.min(axial, buckle);
   }
 
+  /**
+   * Start the drop (or the cartoon hinge).
+   *
+   * What: mark floors above `floorIndex` as the falling block.
+   * Why crush vs hinge: `scenario.crush === true` (North, South, houses)
+   * drops the block through the footprint with almost no omega.
+   * `crush === false` (Rigid tree) hinges it. That is the assumption you
+   * need to get a tip-over. Buildings are not chimneys.
+   *
+   * Standing shaft is plumb (`standingLean = 0`). We do not feed planeAngle
+   * into a banana lean of the tube so it will look like it has to fall over.
+   */
   private initiate(floorIndex: number, theta: number): void {
     if (this.phase !== "fire") return;
     const s = this.scenario;
@@ -1442,6 +1505,12 @@ export class SimEngine {
     this.fullS += (this.fullTS - this.fullS) * a;
   }
 
+  /**
+   * CRITIC: "The tower is drawn leaning so it has to tip."
+   * Standing shaft returns 0. Capacity eccentricity is a CGrav offset in
+   * metres (the CGrav line), not a banana of the tube. Rigid-tree mode is
+   * the control that is *allowed* to hinge — see initiate().
+   */
   standingLean(): number {
     if (this.isPieces) {
       const cg = pieceCgrav(this.pieces);

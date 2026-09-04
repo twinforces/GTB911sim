@@ -2,11 +2,17 @@
 
 Long-term history. What / Why / How. Git hashes filled in after commits.
 
+## 2026-09-04 — MVVM split, tests, hostile documentation
+
+- **What:** Physics moved to `src/model/`. Commands and labels to `src/viewmodel/LabViewModel.ts`. Chrome and WebGL to `src/view/`. Tests on M and VM. Comments say both What and Why because non-coders will read this looking for a cheat.
+- **Why:** Tiny files per accusation. View never constructs the engine.
+- **How:** git mv + LabViewModel. `npm test` includes `src/model/*.test.ts` and `src/viewmodel/*.test.ts`. Critic map in `src/model/README.md`.
+
 ## 2026-09-04 — Working sim snapshot (pre-MVVM)
 
 - **What:** First public commit of Collapse Lab: PFP header, teaching path, neighbor-heat fire, drop-only unlock, house burn-down, apartment as a building, towers with sequential floor climb.
 - **Why:** Lunch-run request was two pushes — this one is the sim as it actually ran, before the file split, so a hostile reader can see we did not “fix the physics while we reorganized.”
-- **How:** `git init` → `twinforces/GTB911sim`. Physics still in `src/lib/sim/` on this commit.
+- **How:** `git init` → `twinforces/GTB911sim`. Physics still in `src/lib/sim/` on this commit. Hash `53e0027`.
 
 ## 2026-09-04 — Credit line and public repo
 
@@ -27,3 +33,4 @@ Long-term history. What / Why / How. Git hashes filled in after commits.
 - Translucent apartment walls read as a bare frame. Opaque brick facades.
 - Giant flame sprites punched the house roof. Cap indoor fire.
 - Early settle while the roof was still on: “still a house.” Settle after the roof is down.
+- Mixing physics with React so a critic had to hunt. MVVM.

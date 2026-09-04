@@ -1,10 +1,18 @@
+/**
+ * 4-pane WebGL view.
+ *
+ * What: One THREE.WebGLRenderer, four scissor cameras (front / iso / zoom / top).
+ * Why it must not own physics: drawing a red column is not heating it.
+ * World3D.render(engine, ...) reads piece positions and temps. It does not
+ * call engine.step — the ViewModel does.
+ */
 import * as THREE from "three";
-import { ANTENNA } from "./constants";
-import type { SimEngine } from "./engine";
+import { ANTENNA } from "@/model/constants";
+import type { SimEngine } from "@/model/engine";
 import { floorTransform } from "./render";
-import { steelRgb } from "./steel";
-import type { Piece } from "./types";
-import { woodRgb } from "./wood";
+import { steelRgb } from "@/model/steel";
+import type { Piece } from "@/model/types";
+import { woodRgb } from "@/model/wood";
 
 export interface PaneRect {
   x: number;

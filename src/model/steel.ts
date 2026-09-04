@@ -1,3 +1,18 @@
+/**
+ * Eurocode 3 steel — remaining strength vs temperature.
+ *
+ * What: Interpolation tables for effective yield (`fy`) and elastic modulus
+ * (`E`) as a function of °C, plus a colour ramp for the View.
+ * Why: The claim “steel melts at office-fire temperatures” is the thing we
+ * are answering. We do not melt anything. We *reduce yield*. Eurocode 3
+ * Table 3.1 is the published reduction. Steel melts near 1500 °C. These
+ * tables are already at zero by 1200 °C.
+ *
+ * CRITIC: “You made up the 600 °C number.”
+ * 600 °C → fy ≈ 0.47. That is the table, not a plot point we picked so the
+ * tower would fall. `npm test` asserts the knots.
+ */
+
 /** Linear interpolation through sorted [x, y] knots. */
 export function interp(x: number, pts: readonly (readonly [number, number])[]): number {
   if (x <= pts[0][0]) return pts[0][1];
@@ -45,14 +60,21 @@ const EMOD: readonly (readonly [number, number])[] = [
   [1200, 0],
 ];
 
+/** Remaining yield strength as a fraction of room-temperature fy. */
 export function fyFactor(T: number): number {
   return interp(T, FY);
 }
 
+/** Remaining elastic modulus as a fraction of room-temperature E. */
 export function eFactor(T: number): number {
   return interp(T, EMOD);
 }
 
+/**
+ * Colour only. Does not affect strength.
+ * Why it lives next to the tables: so nobody has to hunt the View for a
+ * “secret heat” that is actually just a gradient.
+ */
 export function steelRgb(T: number): [number, number, number] {
   const pts: readonly (readonly [number, number, number, number])[] = [
     [20, 210, 220, 232],

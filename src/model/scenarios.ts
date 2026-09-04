@@ -1,4 +1,15 @@
-import type { Scenario } from "./types";
+/**
+ * The runs.
+ *
+ * What: Initial conditions. Same three laws, different members.
+ * Why they are data: switching North Tower vs Rigid tree does not swap a
+ * renderer. It flips `crush` (and a handful of impact numbers). If the
+ * "video" theory were true, those two runs would be the same clip.
+ *
+ * PATH  = bonfire -> 1-storey -> 2-storey -> apartment  (things you have seen)
+ * CLAIM = North, South, fire-stays-put, impact-only, rigid-tree
+ */
+import type { Scenario } from "./types.ts";
 
 const WTC: Pick<
   Scenario,

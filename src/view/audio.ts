@@ -1,3 +1,8 @@
+/**
+ * Click sounds. Presentation only.
+ * What: a thud on impact, a lower thud on initiation.
+ * Why it lives in the View: muting the speakers cannot change fy(T).
+ */
 let ctx: AudioContext | null = null;
 
 export function unlockAudio(): void {
