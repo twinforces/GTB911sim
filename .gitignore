@@ -1,0 +1,25 @@
+# Dependencies and build
+node_modules/
+.vercel/
+.output/
+dist/
+.nitro/
+node_modules/.nitro/
+
+# Local / sandbox
+.grok/
+*.log
+.env
+.env.*
+.DS_Store
+
+# QA dumps, generated art, local DBs
+screenshots/
+artifacts/
+*.sqlite
+*.sqlite3
+
+# Editor
+.idea/
+.vscode/
+*.swp
