@@ -32,7 +32,8 @@ export type PieceKind =
   | "wall"
   | "roof"
   | "tree"
-  | "couch";
+  | "couch"
+  | "join";
 
 export interface Column {
   intact: number;
@@ -91,6 +92,14 @@ export interface Piece {
   restY: number;
   restZ: number;
   alongZ: boolean;
+  /**
+   * Bonfire stick id. Sections of one log share this. 0 = not a stick.
+   * Joins between sections use the same id. A stick is one rigid body
+   * until a join chars through — then it is two.
+   */
+  stickId: number;
+  /** Section index on that stick (0..3 for logs, 0..2 for the join to the right). */
+  seg: number;
 }
 
 export interface Pit {
@@ -212,7 +221,7 @@ export interface SimSnapshot {
   hasPlane: boolean;
   widthM: number;
   heightM: number;
-  storeys: number;
+  stories: number;
   nextId: string | null;
   pathStep: number | null;
   world: WorldKind;

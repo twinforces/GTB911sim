@@ -22,7 +22,7 @@ export const G = 9.81;
 export const STEP = 1 / 60;
 
 export const FLOORS = 110;
-export const FLOOR_H = 3.66; // m, typical WTC storey
+export const FLOOR_H = 3.66; // m, typical WTC story
 export const WIDTH = 63.4; // m, the square tube
 export const HEIGHT = FLOORS * FLOOR_H;
 export const COLS = 5;
@@ -34,7 +34,7 @@ export const COL_X = [0.07, 0.28, 0.5, 0.72, 0.93];
  * 236 perimeter columns + 47 core. Lumping does not invent a hinge.
  */
 export const TRIB = [0.14, 0.18, 0.36, 0.18, 0.14];
-/** kg per storey, order-of-magnitude. */
+/** kg per story, order-of-magnitude. */
 export const MASS = 3.1e6;
 /** Residual factor on dead load after live load is gone. Buildings are not designed at 1.0. */
 export const SF = 2.75;

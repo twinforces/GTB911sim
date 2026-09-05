@@ -8,7 +8,7 @@
  */
 import { useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import { STEP } from "@/model/constants";
-import { World3D, type PaneRect } from "@/view/scene3d";
+import { World3D, WORLD3D_REV, type PaneRect } from "@/view/scene3d";
 import type { Bubble, SimSnapshot } from "@/model/types";
 import type { LabViewModel } from "@/viewmodel/LabViewModel";
 import { cn } from "@/lib/utils";
@@ -103,7 +103,7 @@ export function TowerCanvas({ vmRef, snap, onSnap, className }: Props) {
       world.dispose();
       worldRef.current = null;
     };
-  }, [vmRef]);
+  }, [vmRef, WORLD3D_REV]);
 
   const bubbles = snap?.bubbles ?? [];
   const loadingLabel =
@@ -119,8 +119,8 @@ export function TowerCanvas({ vmRef, snap, onSnap, className }: Props) {
         className="pointer-events-none absolute inset-0 z-10 col-span-full row-span-full h-full w-full"
       />
       <Pane label="Front" slotRef={frontSlot} dataPane="front" />
-      <Pane label="Isometric" slotRef={isoSlot} dataPane="iso" />
-      <Pane label="Iso zoom" slotRef={zoomSlot} dataPane="zoom">
+      <Pane label="Everything" slotRef={isoSlot} dataPane="iso" />
+      <Pane label="Action" slotRef={zoomSlot} dataPane="zoom">
         {bubbles.map((b) => (
           <StatusBubble key={b.id} bubble={b} pane={zoomPane.current} world={worldRef.current} />
         ))}
@@ -158,10 +158,10 @@ function Pane({
     <div
       ref={slotRef}
       data-pane={dataPane}
-      className={cn("relative z-0 min-h-0 w-full overflow-hidden rounded-md", className)}
+      className={cn("relative z-20 min-h-0 w-full overflow-hidden rounded-md", className)}
       style={{ touchAction: "none" }}
     >
-      <p className="pointer-events-none absolute left-3 top-3 z-20 font-mono text-2xs uppercase tracking-widest text-accent">
+      <p className="pointer-events-none absolute left-2 top-2 z-30 rounded-sm bg-black/75 px-2 py-1 font-mono text-xs font-semibold uppercase tracking-widest text-white">
         {label}
       </p>
       {children}

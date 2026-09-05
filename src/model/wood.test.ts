@@ -37,4 +37,17 @@ describe("woodRgb", () => {
     assert.ok(char[0] < fresh[0], "charred wood is darker red");
     assert.ok(char[1] < fresh[1], "charred wood is darker green");
   });
+
+  it("darkens with temperature even before the section is gone", () => {
+    const cool = woodRgb(22, 1);
+    const hot = woodRgb(320, 1);
+    assert.ok(hot[0] < cool[0] * 0.4, `hot wood must read as charcoal (cool ${cool[0]} hot ${hot[0]})`);
+    assert.ok(hot[1] < 40, `green channel ${hot[1]} still looks like timber`);
+  });
+
+  it("is already dark brown at ignition, not waiting for the log to fall", () => {
+    const atIgnition = woodRgb(280, 0.9);
+    const fresh = woodRgb(22, 1);
+    assert.ok(atIgnition[0] < fresh[0] * 0.45, `ignition colour ${atIgnition[0]} vs fresh ${fresh[0]}`);
+  });
 });

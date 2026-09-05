@@ -11,6 +11,12 @@ If you are here to prove the lab is a video, pick the accusation and open the fi
 | The fire is painted on a whole wall | `pieces.ts` `spreadPieces`, `engine.ts` `spreadFire` | A burning member warms neighbors. They light when *they* pass ignition temperature. |
 | The Christmas tree lights the whole house | `pieces.ts` `ignitePieces` + `spreadPieces` | Ignition is the tree only. The tree cannot heat anything but the couch until the couch is lit. |
 | Members fly sideways (demolition) | `pieces.ts` `unlockPiece` | `drop = true` zeroes `vx` and `vz`. Houses and apartments always drop. |
+| Wall panels jump around | `pieces.ts` `integratePieces` / `zNear` | SAT is 2D in x-y. Front and back walls share x,y. Without a z test they explode apart. Restitution is 0. |
+| Logs shrink / boil like noodles | `pieces.ts` `weldStickGroups`, `evaluatePieces` | Four sections + three joins. A stick is one rigid body until a neighbour is half charcoal or the join hits ignition. SAT prefers Y for stacks so the crib is not a Z-grid. |
+| Logs don't darken | `wood.ts` `woodRgb` | Surface char from 80 °C. Ignition is already charcoal. Ember is a coal edge, not a floodlight. |
+| Apartment faces gray / 14 m ribbons | `pieces.ts` `buildApartment`, `scene3d.ts` | Bay × course panels. Street faces carry the window texture; edges are brick. |
+| Nothing rotates — is that beyond the engine? | `pieces.ts` `unlockPiece`, `integratePieces` | Pieces have always had `theta` / `omega`. Unlock is a small flop capped by length (not a centrifuge). |
+| Apartment never collapses | `pieces.ts` `evaluatePieces` apartment branch | Two fire-floor columns losing Eurocode yield is a story mechanism. Nearby bay panels drop, not one 14 m ribbon. |
 | Houses don’t burn down / settle too early | `pieces.ts` `evaluatePieces`, `piecesSettled` | Timber has to char. Roof has to come down before “settled.” |
 | Steel “melts” | `steel.ts` `fyFactor` | Eurocode 3 Table 3.1. Yield is gone by 1200 °C. Steel melts near 1500 °C. Office fires never get there. We reduce *strength*, we do not melt columns. |
 | The tower is pre-leaned so it tips | `engine.ts` `standingLean()` | Returns **0** for the standing shaft. CGrav offset is a number in metres, not a banana. |
@@ -26,7 +32,7 @@ If you are here to prove the lab is a video, pick the accusation and open the fi
 
 ## How a step works (tower world)
 
-1. `stepFire(dt * FireSpeed)` — heat columns, walk fire one storey at a time, Eurocode 3 remaining yield.
+1. `stepFire(dt * FireSpeed)` — heat columns, walk fire one story at a time, Eurocode 3 remaining yield.
 2. `evaluateStructure` — if remaining capacity < load, `initiate`.
 3. `stepCollapse(dt)` — Bazant-style crush, or a hinge if you turned crush off.
 

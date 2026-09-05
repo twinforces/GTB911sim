@@ -9,12 +9,12 @@
  *
  * Two worlds, one object:
  *   pieces  — bonfire / house / apartment (see pieces.ts)
- *   tower   — lumped 110-storey tube (this file: stepFire, evaluateStructure, crush)
+ *   tower   — lumped 110-story tube (this file: stepFire, evaluateStructure, crush)
  *
  * Accusation map:
  *   Fire Speed speeds collapse -> step(): heat uses speed, motion does not
  *   tower is pre-leaned        -> standingLean() returns 0
- *   fire painted on floors     -> spreadFire / climbMinutes (one storey at a time)
+ *   fire painted on floors     -> spreadFire / climbMinutes (one story at a time)
  *   NIST time is a forced hit  -> evaluateStructure uses it as a comparison, not a keyframe
  *   CGrav is decoration        -> cgOffset() / pieceCgrav
  */
@@ -29,7 +29,6 @@ import {
   integratePieces,
   pieceCgrav,
   piecesSettled,
-  restackBonfire,
   spreadPieces,
 } from "./pieces.ts";
 import { eFactor, fyFactor } from "./steel.ts";
@@ -117,6 +116,7 @@ export class SimEngine {
   steelAnnounced = false;
   sagAnnounced = false;
   spreadAnnounced = false;
+  roomAnnounced = false;
   treeAnnounced = false;
   couchAnnounced = false;
   fireFloorAnnounced = 0;
@@ -138,6 +138,12 @@ export class SimEngine {
   fullTS = 40;
   settleHold = 0;
   reducedMotion = false;
+  /**
+   * House action pane. Inside for the tree, then the couch, then a static
+   * outside 3/4. It does not hunt falling boards — that was the "camera
+   * won't sit still" complaint.
+   */
+  houseCam: "room" | "outside" = "room";
 
   get n(): number {
     return this.scenario.world === "pieces" ? this.scenario.floors : this.floors.length;
@@ -211,12 +217,14 @@ export class SimEngine {
     this.steelAnnounced = false;
     this.sagAnnounced = false;
     this.spreadAnnounced = false;
+    this.roomAnnounced = false;
     this.treeAnnounced = false;
     this.couchAnnounced = false;
     this.fireFloorAnnounced = 0;
     this.energyAnnounced = false;
     this.cgAnnounced = false;
     this.settleHold = 0;
+    this.houseCam = "room";
     this.plane = {
       alive: false,
       exploded: false,
@@ -245,10 +253,10 @@ export class SimEngine {
     this.speed = s.defaultSpeed;
     const label =
       s.shape === "bonfire"
-        ? `${this.pieces.length} logs in a ${s.width.toFixed(1)} m pit`
+        ? `${this.pieces.length} wood pieces (4 sections + 3 joins per stick) in a ${s.width.toFixed(1)} m pit`
         : s.world === "pieces"
           ? `${this.pieces.length} members · ${this.height.toFixed(1)} m · ${s.width.toFixed(1)} m base`
-          : `${s.floors} storeys · ${this.height.toFixed(0)} m · ${s.width.toFixed(1)} m base`;
+          : `${s.floors} stories · ${this.height.toFixed(0)} m · ${s.width.toFixed(1)} m base`;
     this.log(0, `${label}. Live Euler step, g = 9.81. Not a video.`, "info");
   }
 
@@ -279,7 +287,7 @@ export class SimEngine {
           this.scenario.shape === "bonfire"
             ? "One match, one log. Fire has to walk. The pit still holds the pile."
             : this.scenario.shape === "apartment"
-              ? "One unit on the third storey. Heat walks to the next room, then the floor above."
+              ? "One unit on the third story. Heat walks to the next room, then the floor above."
               : "Dry tree, one match. Tree, then the couch, then the timber. When the wood is charcoal, the roof comes down in the footprint.",
           "critical",
           6.5,
@@ -387,9 +395,8 @@ export class SimEngine {
       heatPieces(this.pieces, s, dt);
       spreadPieces(this.pieces, s, dt);
     }
-    if (s.shape === "bonfire" && this.pit) restackBonfire(this.pieces, this.pit);
     const failed = evaluatePieces(this.pieces, s);
-    const logCrumble = failed?.kind === "log";
+    const logCrumble = failed?.kind === "log" || failed?.kind === "join";
     const furniture = failed?.kind === "tree" || failed?.kind === "couch";
     if (failed && this.phase === "fire" && !logCrumble && !furniture) {
       this.phase = "collapse";
@@ -422,12 +429,12 @@ export class SimEngine {
           this.pushBubble(
             this.width / 2,
             0.2,
-            "Bottom layer eaten",
-            "Bonfires fall because the logs underneath are consumed. The crib sags into the pit. Nothing explodes.",
+            "Bottom sections dropping",
+            "Charcoal cannot carry the crib. Those sections unlock with no sideways kick — Newton's first law — and fall into the pit. The pile is not shrinking. It is falling.",
             "fire",
             7,
           );
-          this.log(this.t / 60, "Bottom layer consumed. Pile sagging into the pit.", "fire");
+          this.log(this.t / 60, "Bottom sections charred through and dropped. Gravity.", "fire");
         }
       }
     }
@@ -462,20 +469,21 @@ export class SimEngine {
             couch.x,
             couch.y + 0.4,
             "Couch caught",
-            "Heat walked off the tree onto the furniture. The room is next, not the whole house at once.",
+            "Foam seat cushions. They burn hotter than the tree. The room is next.",
             "fire",
             6.5,
           );
-          this.log(this.t / 60, "Couch caught from the tree.", "fire");
+          this.log(this.t / 60, "Couch caught from the tree. Foam runs hotter than needles.", "fire");
         }
       }
     }
-    if (s.shape === "house" && this.phase === "fire" && this.spreadAnnounced && this.t > 280) {
+    if (s.shape === "house" && this.phase === "fire" && this.t > 480) {
       const roof = this.pieces.filter((p) => p.kind === "roof");
-      const roofDown = roof.length > 0 && roof.every((p) => p.dynamic);
+      const roofDown = roof.length > 0 && roof.filter((p) => p.dynamic).length >= Math.max(2, Math.floor(roof.length * 0.34));
       let fuel = 0;
       for (const p of this.pieces) fuel += p.fuel;
-      if (roofDown && fuel / Math.max(1, this.pieces.length) < 0.28) this.settlePieces();
+      const spent = fuel / Math.max(1, this.pieces.length) < 0.22;
+      if (roofDown || spent) this.settlePieces();
     }
     if (this.phase === "fire" && !this.spreadAnnounced && s.fireSpread > 0 && s.shape !== "apartment") {
       const right = this.pieces.filter((p) => p.x > this.width * 0.55 && p.burning > 0.12);
@@ -493,20 +501,42 @@ export class SimEngine {
         this.log(this.t / 60, "Fire spread to the far side.", "fire");
       }
     }
-    if (s.shape === "apartment" && this.phase === "fire" && !this.spreadAnnounced) {
-      const up = this.pieces.filter((p) => p.layer >= s.impactLo && p.burning > 0.2);
-      if (up.length > 0) {
-        this.spreadAnnounced = true;
-        const p = up[0];
-        this.pushBubble(
-          p.x,
-          p.y,
-          "Fire walked up",
-          "The unit above caught from the one below. Same neighbor-heat rule as the house, just a taller stack.",
-          "fire",
-          6.5,
+    if (s.shape === "apartment" && this.phase === "fire") {
+      const ignLayer = s.impactLo - 1;
+      if (!this.roomAnnounced) {
+        const next = this.pieces.filter(
+          (p) => p.layer === ignLayer && p.col >= 1 && p.kind === "wall" && p.burning > 0.2,
         );
-        this.log(this.t / 60, `Fire climbed to storey ${p.layer + 1}.`, "fire");
+        if (next.length >= 3) {
+          this.roomAnnounced = true;
+          const p = next[0];
+          this.pushBubble(
+            p.x,
+            p.y,
+            "Next room",
+            "The party wall got hot. Fire walked into the adjacent unit on the same story.",
+            "fire",
+            6.5,
+          );
+          this.log(this.t / 60, `Fire walked to the next room on story ${s.impactLo}.`, "fire");
+        }
+      }
+      if (!this.spreadAnnounced) {
+        const up = this.pieces.filter((p) => p.layer > ignLayer && p.kind === "wall" && p.burning > 0.2);
+        if (up.length >= 3) {
+          this.spreadAnnounced = true;
+          const story = Math.min(...up.map((p) => p.layer)) + 1;
+          const p = up[0];
+          this.pushBubble(
+            p.x,
+            p.y,
+            "Fire walked up",
+            `Story ${story} caught from the compartment below. Not a fuse up the face.`,
+            "fire",
+            6.5,
+          );
+          this.log(this.t / 60, `Fire climbed to story ${story}.`, "fire");
+        }
       }
     }
   }
@@ -535,13 +565,35 @@ export class SimEngine {
       );
     }
     if (this.phase === "collapse") {
+      const house = this.scenario.shape === "house";
+      const apt = this.scenario.shape === "apartment";
+      const hold = house ? 12 : apt ? 18 : 1.1;
       if (piecesSettled(this.pieces) && loose > 0) {
         this.settleHold += dt;
-        if (this.settleHold > 1.1) this.settlePieces();
+        if (this.settleHold > hold) this.settlePieces();
       } else {
         this.settleHold = 0;
       }
-      if (this.initiationT !== null && this.t - this.initiationT > 240 && piecesSettled(this.pieces)) {
+      if (house && this.t > 600) {
+        let fuel = 0;
+        for (const p of this.pieces) fuel += p.fuel;
+        if (fuel / Math.max(1, this.pieces.length) < 0.2) this.settlePieces();
+      }
+      if (
+        apt &&
+        this.initiationT !== null &&
+        this.t - this.initiationT > 360 &&
+        piecesSettled(this.pieces)
+      ) {
+        this.settlePieces();
+      }
+      if (
+        !house &&
+        !apt &&
+        this.initiationT !== null &&
+        this.t - this.initiationT > 240 &&
+        piecesSettled(this.pieces)
+      ) {
         this.settlePieces();
       }
     }
@@ -560,20 +612,33 @@ export class SimEngine {
       this.pieces.some((p) => p.kind === "roof") &&
       this.pieces.filter((p) => p.kind === "roof").every((p) => p.dynamic);
     const houseStanding = this.scenario.shape === "house" && !roofDown && loose < this.pieces.length * 0.25;
+    const apt = this.scenario.shape === "apartment";
+    const aptCorner = apt && loose < this.pieces.length * 0.45;
     const bonfire = this.scenario.shape === "bonfire";
+    const title = bonfire
+      ? "In the pit"
+      : houseStanding
+        ? "Still a house"
+        : this.scenario.shape === "house"
+          ? "Burned down"
+          : aptCorner
+            ? "Corner bay down"
+            : "Rubble";
     this.pushBubble(
       this.width / 2,
       Math.max(0.4, this.height * 0.2),
-      bonfire ? "In the pit" : houseStanding ? "Still a house" : this.scenario.shape === "house" ? "Burned down" : "Rubble",
+      title,
       bonfire
         ? `The crib sagged as the bottom logs were eaten. Charcoal stays in the pit. CGrav x = ${cg.x.toFixed(2)} m.`
         : houseStanding
           ? `Fire ran ${min.toFixed(0)} min. Tree, then the couch, then the timber. The roof is still a roof. CGrav stayed over the footprint.`
           : this.scenario.shape === "house"
             ? `Fire ran ${min.toFixed(0)} min. Timber charred, roof in the footprint. CGrav x = ${cg.x.toFixed(2)} m.`
-            : inside
-              ? `Fire ran ${min.toFixed(0)} min. Things made of pieces form a pile. CGrav stayed over the ${this.pit ? "pit" : "footprint"}.`
-              : "The pile walked — check crush / hinge assumptions.",
+            : aptCorner
+              ? `Fire ran ${min.toFixed(0)} min. Unprotected steel in the fire unit lost yield. That bay dropped. The rest of the building is still a building. CGrav x = ${cg.x.toFixed(2)} m.`
+              : inside
+                ? `Fire ran ${min.toFixed(0)} min. Things made of pieces form a pile. CGrav stayed over the ${this.pit ? "pit" : "footprint"}.`
+                : "The pile walked — check crush / hinge assumptions.",
       inside ? "ok" : "warn",
       10,
     );
@@ -585,7 +650,9 @@ export class SimEngine {
           ? `Fire spread through the house. Roof stayed. CGrav x = ${cg.x.toFixed(2)} m.`
           : this.scenario.shape === "house"
             ? `House burned down. Roof in the footprint. CGrav x = ${cg.x.toFixed(2)} m.`
-            : `Settled as rubble. CGrav x = ${cg.x.toFixed(2)} m.`,
+            : aptCorner
+              ? `Corner bay pancaked. Rest of the building still standing. CGrav x = ${cg.x.toFixed(2)} m.`
+              : `Settled as rubble. CGrav x = ${cg.x.toFixed(2)} m.`,
       inside ? "ok" : "warn",
     );
   }
@@ -602,8 +669,8 @@ export class SimEngine {
       if (p.burning < 0.2) continue;
       if (p.kind === "wall" || p.kind === "roof" || p.kind === "joist" || p.kind === "sill" || p.kind === "plate") continue;
       if (hash(this.t * 0.02 + p.id) > 0.62) continue;
-      const lift = indoor ? Math.min(0.35, p.h * 0.2) : p.h * 0.3;
-      this.spawn("fire", p.x + (hash(p.id) - 0.5) * Math.min(p.w, 1.2) * 0.25, p.y + lift, indoor ? 0.6 : 3, indoor ? 7 : 12, p.z);
+      const lift = indoor ? Math.min(0.35, p.h * 0.2) : p.kind === "log" ? 0.4 : p.h * 0.3;
+      this.spawn("fire", p.x + (hash(p.id) - 0.5) * Math.min(p.w, 1.2) * 0.25, p.y + lift, indoor ? 0.6 : 4, indoor ? 7 : 14, p.z);
       if (p.burning > 0.45) this.spawn("smoke", p.x, p.y + (indoor ? 0.45 : 0.2), indoor ? 0.8 : 2, indoor ? 8 : 10, p.z);
     }
   }
@@ -617,11 +684,36 @@ export class SimEngine {
       this.camTS = s.actionScale;
       return;
     }
+    if (s.shape === "house") {
+      const tree = this.pieces.find((p) => p.kind === "tree");
+      const couch = this.pieces.find((p) => p.kind === "couch");
+      const structureFalling = this.pieces.some(
+        (p) => p.dynamic && p.kind !== "tree" && p.kind !== "couch",
+      );
+      if (structureFalling || this.phase === "collapse" || this.phase === "settled") {
+        this.houseCam = "outside";
+      } else {
+        this.houseCam = "room";
+      }
+      const focus = tree ?? couch;
+      this.camTX = focus ? focus.x : s.width * 0.28;
+      this.camTY = focus ? focus.y : 0.9;
+      this.camTS = s.actionScale;
+      return;
+    }
+    if (s.shape === "apartment") {
+      // Same rule as the crib and the house: the action pane is a shot, not a chase.
+      this.camTX = s.width / 2;
+      this.camTY = this.height * 0.38;
+      this.camTS = s.actionScale;
+      return;
+    }
+    // Towers: track the fire, not the rubble.
     let x = 0;
     let y = 0;
     let n = 0;
     for (const p of this.pieces) {
-      if (p.burning > 0.15 || p.dynamic) {
+      if (p.burning > 0.15) {
         x += p.x;
         y += p.y;
         n += 1;
@@ -670,6 +762,8 @@ export class SimEngine {
         restY: y,
         restZ: 0,
         alongZ: false,
+        stickId: 0,
+        seg: 0,
       });
     }
     if (this.pieces.length > 180) this.pieces.splice(0, 40);
@@ -740,7 +834,7 @@ export class SimEngine {
           f.cols[c].stripped = (c <= 2 ? 0.92 : 0.4) * Math.max(edge, 0.5);
         }
         if (!s.noFire && (sever ? c <= 2 : this.n <= 8 || c <= 3)) {
-          // Jet fuel lights the lowest impact storey hard. The rest of the
+          // Jet fuel lights the lowest impact story hard. The rest of the
           // gash is stripped and waiting — fire has to walk up, one floor
           // at a time, over the hour. "Fire stays put" lights the whole belt.
           const seedNow = !sever || s.fireSpread <= 0 || story === s.impactLo || this.n <= 8;
@@ -766,23 +860,23 @@ export class SimEngine {
 
     const gash = s.impactHi - s.impactLo + 1;
     const hourNote = s.nistMinutes > 0
-      ? ` Historically ${s.nistMinutes} min of fire. Elevator shafts are chimneys — it walks up one storey at a time.`
+      ? ` Historically ${s.nistMinutes} min of fire. Elevator shafts are chimneys — it walks up one story at a time.`
       : "";
     this.pushBubble(
       this.width * 0.18,
       midY,
       sever ? "Impact" : "Ignition",
       sever
-        ? `${gash} floors punched. Perimeter + core severed on the inbound face. Fire on storey ${s.impactLo}.${hourNote}`
-        : `Fire on storey ${s.impactLo}. The floors above are sitting on this one. They will not hover.`,
+        ? `${gash} floors punched. Perimeter + core severed on the inbound face. Fire on story ${s.impactLo}.${hourNote}`
+        : `Fire on story ${s.impactLo}. The floors above are sitting on this one. They will not hover.`,
       "critical",
       6.5,
     );
     this.log(
       0,
       sever
-        ? `Impact floors ${s.impactLo}–${s.impactHi}. Columns cut on the inbound face and into the core. Fire starts on storey ${s.impactLo}.${s.nistMinutes > 0 ? ` NIST stand time ${s.nistMinutes} min.` : ""}`
-        : `Ignition on storey ${s.impactLo}. Insulation stripped on the fire face.`,
+        ? `Impact floors ${s.impactLo}–${s.impactHi}. Columns cut on the inbound face and into the core. Fire starts on story ${s.impactLo}.${s.nistMinutes > 0 ? ` NIST stand time ${s.nistMinutes} min.` : ""}`
+        : `Ignition on story ${s.impactLo}. Insulation stripped on the fire face.`,
       "critical",
     );
     this.camTX = this.width * 0.28;
@@ -837,7 +931,7 @@ export class SimEngine {
   }
 
   /**
-   * Minutes of heating before the next storey is allowed to light.
+   * Minutes of heating before the next story is allowed to light.
    * What: (NIST minutes * 0.88) / (impact belt + a few floors).
    * Why: North stood ~102 min, South ~56. The hour is a climbing front,
    * not a single flashover of 110 floors. This is a time *scale* for the
@@ -852,7 +946,7 @@ export class SimEngine {
     return Math.max(4, (s.nistMinutes * 0.88) / walk);
   }
 
-  private igniteStorey(story: number, intensity: number): boolean {
+  private igniteStory(story: number, intensity: number): boolean {
     const f = this.floors[story - 1];
     if (!f || f.state !== "stacked") return false;
     let any = false;
@@ -870,10 +964,10 @@ export class SimEngine {
   /**
    * Tower fire. Same neighbor-heat idea as spreadPieces, on five column groups.
    * Horizontal leak to adjacent groups; a little downward; upward is gated
-   * by climbMinutes so the fire walks one storey at a time.
+   * by climbMinutes so the fire walks one story at a time.
    *
    * CRITIC: "You lit the whole shaft."
-   * `unlocked = impactLo + floor(minutes / climbMin)`. Storey 94 cannot
+   * `unlocked = impactLo + floor(minutes / climbMin)`. Story 94 cannot
    * flash because 93 is pretty. It flashes when the clock has paid for it.
    */
   private spreadFire(dt: number): void {
@@ -925,7 +1019,7 @@ export class SimEngine {
     const cap = Math.min(this.floors.length, s.impactHi + 7);
     const next = this.fireFloorAnnounced + 1;
     if (next <= unlocked && next <= cap) {
-      if (this.igniteStorey(next, 0.7)) {
+      if (this.igniteStory(next, 0.7)) {
         this.fireFloorAnnounced = next;
         this.trauma = Math.max(this.trauma, 0.55);
         const y = next * this.floorH;
@@ -934,14 +1028,14 @@ export class SimEngine {
         this.pushBubble(
           this.width * 0.5,
           y,
-          `Fire on storey ${next}`,
+          `Fire on story ${next}`,
           next <= s.impactHi
-            ? `Storey ${next} flashes over. Jet fuel opened the belt; the hour is the fire walking it.`
+            ? `Story ${next} flashes over. Jet fuel opened the belt; the hour is the fire walking it.`
             : "One floor at a time. Elevator shafts are chimneys. The hour is the fire walking up.",
           "fire",
           7,
         );
-        this.log(minutes, `Fire on storey ${next} at ${minutes.toFixed(0)} min.`, "fire");
+        this.log(minutes, `Fire on story ${next} at ${minutes.toFixed(0)} min.`, "fire");
         for (let k = 0; k < 18; k++) {
           this.spawn("fire", this.width * (0.12 + hash(k + next) * 0.7), y + (hash(k) - 0.3) * this.floorH, 10, 22);
           this.spawn("smoke", this.width * (0.2 + hash(k + 9) * 0.55), y + this.floorH * 0.6, 4, 14);
@@ -1083,7 +1177,7 @@ export class SimEngine {
 
     // North videos: plumb at collapse. South: the UPPER BLOCK leaned a few
     // degrees, then dropped through the footprint. Rotational inertia of a
-    // 110-storey tube snaps any impact wobble back to vertical long before
+    // 110-story tube snaps any impact wobble back to vertical long before
     // fire failure — do not feed planeAngle into the standing shaft.
     const lean = s.crush
       ? clamp(s.planeAngle, -0.14, 0.14)
@@ -1119,7 +1213,7 @@ export class SimEngine {
       lo * this.floorH + this.floorH,
       "Initiation",
       s.crush
-        ? "Storey mechanism. The upper block is attached — it drops with the floor that failed."
+        ? "Story mechanism. The upper block is attached — it drops with the floor that failed."
         : "Hinge forms. Crush is disabled — this is the cartoon chimney.",
       "critical",
       7,
@@ -1171,7 +1265,7 @@ export class SimEngine {
     b.vy += G * dt;
     b.bottomY -= b.vy * dt;
     // Snap the block back toward vertical as it drops. Inertia of the
-    // 110-storey mass does this; the videos are a vertical crush, not a lean.
+    // 110-story mass does this; the videos are a vertical crush, not a lean.
     b.theta *= Math.exp(-1.1 * dt);
     b.omega *= Math.exp(-2.4 * dt);
     b.x += b.vx * dt;
@@ -1231,17 +1325,25 @@ export class SimEngine {
     this.trauma = Math.min(1, this.trauma + 0.12);
 
     if (!this.energyAnnounced && idx <= this.scenario.impactLo) {
-      this.energyAnnounced = true;
-      const ratio = ke / Math.max(eFail, 1);
-      this.pushBubble(
-        this.width * 0.7,
-        b.bottomY + this.floorH,
-        `${Math.max(2, ratio).toFixed(0)}× floor capacity`,
-        "The floors above are still attached. They fall with the storey that failed — they do not hover.",
-        "warn",
-        6.5,
-      );
-      this.log(this.t / 60, `Crush front: impact energy ${ratio.toFixed(1)}× storey capacity.`, "warn");
+      // KE at first contact can be ~0 — the block has only just started to
+      // drop. The teaching number is what the stories above weigh versus
+      // what this story can take: drop the block one story (m g h) plus
+      // whatever speed it already has.
+      const pe = b.mass * G * this.floorH;
+      const ratio = (ke + pe) / Math.max(eFail, 1);
+      if (ratio >= 1.2) {
+        this.energyAnnounced = true;
+        const shown = Math.max(2, ratio);
+        this.pushBubble(
+          this.width * 0.7,
+          b.bottomY + this.floorH,
+          `${shown.toFixed(0)}× this story's capacity`,
+          "The floors above are still attached. They fall with the story that failed — they do not hover.",
+          "warn",
+          6.5,
+        );
+        this.log(this.t / 60, `Crush front: falling block is ${shown.toFixed(1)}× this story's capacity.`, "warn");
+      }
     }
 
     if (!this.cgAnnounced) {
@@ -1427,7 +1529,7 @@ export class SimEngine {
 
   private log(tMin: number, text: string, kind: BubbleKind): void {
     this.events.push({ tMin, text, kind });
-    if (this.events.length > 40) this.events.shift();
+    if (this.events.length > 80) this.events.shift();
   }
 
   private ageBubbles(dt: number): void {
@@ -1616,7 +1718,7 @@ export class SimEngine {
     const cap = this.colCapacity(mid, 0);
     const des = this.designCap(mid, 0);
     return {
-      label: `impact-face storey ${mid + 1}`,
+      label: `impact-face story ${mid + 1}`,
       temp: col.temp,
       fy: fyFactor(col.temp) * col.intact,
       ratio: des > 0 ? cap / des : 1,
@@ -1713,7 +1815,7 @@ export class SimEngine {
       initiationMin: this.initiationT === null ? null : this.initiationT / 60,
       nistMinutes: s.nistMinutes,
       faces,
-      events: this.events.slice(-12),
+      events: this.events.slice(),
       bubbles: this.bubbles,
       verdict,
       crush: s.crush,
@@ -1724,7 +1826,7 @@ export class SimEngine {
       hasPlane: s.hasPlane,
       widthM: this.width,
       heightM: this.height,
-      storeys: this.n,
+      stories: this.n,
       nextId: s.nextId,
       pathStep: s.pathStep,
       world: s.world,

@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import { CLAIM, PATH, SCENARIOS, scenarioById } from "./scenarios.ts";
 
 describe("teaching path", () => {
-  it("walks bonfire → 1-storey → 2-storey → apartment", () => {
+  it("walks bonfire → 1-story → 2-story → apartment", () => {
     assert.deepEqual(
       PATH.map((s) => s.id),
       ["bonfire", "house1", "house2", "apartment"],

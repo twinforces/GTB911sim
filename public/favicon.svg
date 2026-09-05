@@ -6,9 +6,11 @@
   </defs>
   <g clip-path="url(#tile)">
     <rect width="32" height="32" fill="#071018"/>
-    <rect x="0" y="25" width="32" height="7" fill="#3d6a2e"/>
-    <path fill="#efe2c8" d="M6 16h20v10H6z"/>
-    <path fill="#efe2c8" d="M5 16 16 6l11 10z"/>
-    <rect x="13" y="18" width="6" height="7" fill="#ff5a1f"/>
+    <rect x="0" y="26" width="32" height="6" fill="#101820"/>
+    <rect x="3" y="26" width="26" height="1.5" fill="#3ecfc4"/>
+    <rect x="8" y="8" width="6" height="18" fill="#d5dde2"/>
+    <rect x="8" y="8" width="6" height="5" fill="#ff5a1f"/>
+    <rect x="18" y="5" width="6" height="21" fill="#d5dde2"/>
+    <rect x="18" y="5" width="6" height="5" fill="#ff5a1f"/>
   </g>
 </svg>

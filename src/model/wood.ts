@@ -11,6 +11,12 @@
  * CRITIC: “You set wood to zero so the roof would drop.”
  * 250 °C → half. 500 °C → none. That is the published wood-in-fire range,
  * not a knob on the house scenario. Char (section loss) is `intact`, here.
+ *
+ * CRITIC: “The logs don't darken.”
+ * Colour used to wait on `intact`. A log can be 400 °C and still 90%
+ * section — that's a black coal with a wood core, and it has to *look*
+ * like one. Surface char tracks temperature from ~80 °C (browning) to
+ * 380 °C (charcoal). Ember is a coal edge, not a floodlight.
  */
 import { interp } from "./steel.ts";
 
@@ -32,10 +38,13 @@ export function woodFy(T: number): number {
 
 /** Fresh timber → charcoal. Ember glow is added by the mesh emissive, not here. */
 export function woodRgb(T: number, intact: number): [number, number, number] {
-  const char = Math.max(0, Math.min(1, 1 - intact));
-  const ember = T > 380 && intact > 0.06 ? Math.min(0.55, (T - 380) / 500) : 0;
-  const r = 168 * (1 - char) + 22 * char + ember * 110;
-  const g = 104 * (1 - char) + 16 * char + ember * 28;
-  const b = 48 * (1 - char) + 12 * char + ember * 4;
-  return [r, g, b];
+  const section = Math.max(0, Math.min(1, 1 - intact));
+  // Surface char: browning from 80 °C, charcoal by ignition, black by 380 °C.
+  const heatChar = T <= 80 ? 0 : T >= 380 ? 1 : (T - 80) / 300;
+  const char = Math.min(1, Math.max(section * 0.92, heatChar * 0.97));
+  const r = 158 * (1 - char) + 14 * char;
+  const g = 98 * (1 - char) + 9 * char;
+  const b = 48 * (1 - char) + 7 * char;
+  const ember = T > 520 && intact > 0.04 ? Math.min(0.18, (T - 520) / 700) : 0;
+  return [r + ember * 55, g + ember * 14, b + ember * 4];
 }

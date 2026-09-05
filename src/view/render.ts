@@ -88,7 +88,7 @@ export function floorTransform(
       h: H,
     };
   }
-  // Remaining storeys stay plumb. Standing lean was a unit bug: eccentricity
+  // Remaining storys stay plumb. Standing lean was a unit bug: eccentricity
   // in metres was fed to atan2 as if it were a force, which bent the shaft
   // into a banana. Videos of both towers show a vertical stack until the
   // upper block detaches.

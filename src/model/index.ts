@@ -22,6 +22,8 @@ export {
   fyOf,
   hottest,
   restackBonfire,
+  LOG_SECTIONS,
+  LOG_JOINS,
   unlockPiece,
 } from "./pieces.ts";
 export { SimEngine } from "./engine.ts";

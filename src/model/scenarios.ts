@@ -6,7 +6,7 @@
  * renderer. It flips `crush` (and a handful of impact numbers). If the
  * "video" theory were true, those two runs would be the same clip.
  *
- * PATH  = bonfire -> 1-storey -> 2-storey -> apartment  (things you have seen)
+ * PATH  = bonfire -> 1-story -> 2-story -> apartment  (things you have seen)
  * CLAIM = North, South, fire-stays-put, impact-only, rigid-tree
  */
 import type { Scenario } from "./types.ts";
@@ -49,8 +49,8 @@ export const SCENARIOS: Scenario[] = [
     id: "bonfire",
     name: "Bonfire",
     short: "Pit · hash",
-    blurb: "A log tower in a pit: || then =, like a hash. One match, one corner. Fire grows up and sideways. The logs are pieces — they fall into the pit. They do not walk out of it.",
-    brief: "As a Boy Scout, I had to build a bonfire that could be lit from a single match. It didn't leave the fire pit, not magic.",
+    blurb: "A log tower in a pit: || then =, like a hash. Each stick is four sections with three joins that hold until a neighbour is half charcoal, or the join hits ignition. One match. Fire walks. Logs blacken, then break. The crib does not shrink in place.",
+    brief: "To Earn the Merit Badge, a Boy Scout must build a bonfire that can be lit with one match.",
     clockStart: "00:00:00",
     nistMinutes: 0,
     world: "pieces",
@@ -79,7 +79,7 @@ export const SCENARIOS: Scenario[] = [
   },
   {
     id: "house1",
-    name: "1-storey house",
+    name: "1-story house",
     short: "Tree, then couch",
     blurb: "A house you have seen. Dry Christmas tree, one match. The tree goes, then the couch, then the room. Timber chars. The roof comes down in the footprint — houses burn down, they do not roll over.",
     brief: "Dry Christmas tree, one match. Tree, then the couch, then the room. When the timber is charcoal, the roof drops in the footprint.",
@@ -111,10 +111,10 @@ export const SCENARIOS: Scenario[] = [
   },
   {
     id: "house2",
-    name: "2-storey house",
+    name: "2-story house",
     short: "Tree, then up",
     blurb: "The second floor is sitting on the first. Same tree, same gravity, more mass above. Fire walks up. Some internal timber goes. The roof lands on top. Pieces, not a chimney.",
-    brief: "Same dry tree, one more storey above it. Tree, then the couch, then up. Some timber internally. Roof lands on top.",
+    brief: "Same dry tree, one more story above it. Tree, then the couch, then up. Some timber internally. Roof lands on top.",
     clockStart: "00:00:00",
     nistMinutes: 0,
     world: "pieces",
@@ -144,9 +144,9 @@ export const SCENARIOS: Scenario[] = [
   {
     id: "apartment",
     name: "Apartment",
-    short: "8 storeys",
-    blurb: "A brick stack now — walls, windows, a door, a parapet. Fire in one corner unit on the third storey. Heat walks to the next room, then up. Extra height is extra mass, not a hinge. Storeys crush into rubble in the footprint.",
-    brief: "A building, not a frame. One unit on the third storey. Heat walks to the next room, then up.",
+    short: "8 stories",
+    blurb: "A brick stack now — walls, windows, a door, a parapet. Fire in one corner unit on the third story. Heat walks to the next room, then up. Extra height is extra mass, not a hinge. When a bay loses its columns the story pancakes into the one below.",
+    brief: "A building, not a frame. One unit on the third story. Heat walks to the next room, then up.",
     clockStart: "00:00:00",
     nistMinutes: 0,
     world: "pieces",
@@ -157,7 +157,7 @@ export const SCENARIOS: Scenario[] = [
     mass: 400,
     viewScale: 9.2,
     actionScale: 22,
-    defaultSpeed: 18,
+    defaultSpeed: 8,
     hasPlane: false,
     group: "path",
     pathStep: 4,
@@ -171,14 +171,14 @@ export const SCENARIOS: Scenario[] = [
     hatTruss: false,
     planeAngle: 0,
     hasAntenna: false,
-    heatRate: 8,
+    heatRate: 5,
   },
   {
     id: "north",
     name: "North Tower",
     short: "417 m · 110",
-    blurb: "Same physics, 110 storeys. More central hit, high in the stack. Fire spreads. The roof belt hangs the wound for a long time, then the upper block drops through the 63.4 m footprint.",
-    brief: "Airplane hits, kerosene into the core. Fire starts on 93 and walks up, one storey at a time, for 102 minutes. People die from paperwork, not kerosene.",
+    blurb: "Same physics, 110 stories. More central hit, high in the stack. Fire spreads. The roof belt hangs the wound for a long time, then the upper block drops through the 63.4 m footprint.",
+    brief: "Airplane hits, kerosene into the core. Fire starts on 93 and walks up, one story at a time, for 102 minutes. People die from paperwork, not kerosene.",
     ...WTC,
     nextId: "south",
     nistMinutes: 102,

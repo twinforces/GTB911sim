@@ -1,10 +1,10 @@
-# Collapse Lab
+# 9/11 Collapse Lab
 
-An [@GrumpyTechBro](https://x.com/GrumpyTechBro) joint.
+A [GrumpyTechBro](https://x.com/GrumpyTechBro) Joint.
 
 Interactive 3D physics, not a video. A teaching path:
 
-**Boy Scout bonfire → 1-storey house → 2-storey house → apartment → North/South Tower.**
+**Boy Scout bonfire → 1-story house → 2-story house → apartment → North/South Tower.**
 
 Gravity is 9.81 m/s². Steel follows Eurocode 3 reduction factors. Wood chars. Fire spreads by **neighbor heat**: a burning member warms what is within a couple of metres; when that neighbor crosses ignition temperature, it lights. No whole-wall cheat.
 

@@ -14,6 +14,9 @@ import { steelRgb } from "@/model/steel";
 import type { Piece } from "@/model/types";
 import { woodRgb } from "@/model/wood";
 
+/** Bump when World3D constructor changes so the canvas remounts (HMR). */
+export const WORLD3D_REV = 10;
+
 export interface PaneRect {
   x: number;
   y: number;
@@ -235,65 +238,59 @@ function facadeTexture(door: boolean): THREE.CanvasTexture {
 	return tex;
 }
 function apartmentTexture(door: boolean): THREE.CanvasTexture {
-	const w = 256;
+	const w = 128;
 	const h = 128;
 	const c = document.createElement("canvas");
 	c.width = w;
 	c.height = h;
 	const ctx = c.getContext("2d");
 	if (!ctx) return new THREE.CanvasTexture(c);
-	ctx.fillStyle = "#b58a62";
+	ctx.fillStyle = "#b56a42";
 	ctx.fillRect(0, 0, w, h);
-	for (let y = 8; y < h - 10; y += 7) {
-		const off = (y / 7) % 2 === 0 ? 0 : 9;
-		for (let x = -10; x < w; x += 18) {
-			const n = ((x + y) / 7) % 4;
-			ctx.fillStyle = n === 0 ? "#a87850" : n === 1 ? "#c4966c" : n === 2 ? "#b08058" : "#c9a078";
-			ctx.fillRect(x + off, y, 16, 6);
-			ctx.fillStyle = "rgba(62, 40, 24, 0.35)";
-			ctx.fillRect(x + off, y + 5, 16, 1);
+	for (let y = 10; y < h - 12; y += 8) {
+		const off = (y / 8) % 2 === 0 ? 0 : 10;
+		for (let x = -12; x < w; x += 20) {
+			const n = ((x + y) / 8) % 4;
+			ctx.fillStyle = n === 0 ? "#a85a36" : n === 1 ? "#c47448" : n === 2 ? "#b0623c" : "#d08052";
+			ctx.fillRect(x + off, y, 18, 7);
+			ctx.fillStyle = "rgba(62, 32, 18, 0.4)";
+			ctx.fillRect(x + off, y + 6, 18, 1);
 		}
 	}
-	ctx.fillStyle = "#d8cbb8";
-	ctx.fillRect(0, 0, w, 8);
-	ctx.fillRect(0, h - 10, w, 10);
-	const pane = (x: number, y: number, ww: number, hh: number) => {
-		ctx.fillStyle = "#1c3a52";
-		ctx.fillRect(x - 3, y - 3, ww + 6, hh + 6);
-		ctx.fillStyle = "#2a5f86";
-		ctx.fillRect(x, y, ww, hh);
-		ctx.fillStyle = "rgba(190, 220, 240, 0.38)";
-		ctx.fillRect(x, y, ww * 0.4, hh);
-		ctx.strokeStyle = "#efe6d6";
-		ctx.lineWidth = 2;
-		ctx.strokeRect(x, y, ww, hh);
-		ctx.beginPath();
-		ctx.moveTo(x + ww / 2, y);
-		ctx.lineTo(x + ww / 2, y + hh);
-		ctx.moveTo(x, y + hh / 2);
-		ctx.lineTo(x + ww, y + hh / 2);
-		ctx.stroke();
-	};
+	ctx.fillStyle = "#dcc8b0";
+	ctx.fillRect(0, 0, w, 10);
+	ctx.fillRect(0, h - 12, w, 12);
 	if (door) {
-		pane(12, 16, 36, 52);
-		pane(56, 16, 36, 52);
-		pane(188, 16, 36, 52);
 		ctx.fillStyle = "#3d4a58";
-		ctx.fillRect(108, 22, 52, 96);
+		ctx.fillRect(36, 28, 56, 88);
 		ctx.strokeStyle = "#1e262e";
 		ctx.lineWidth = 3;
-		ctx.strokeRect(108, 22, 52, 96);
+		ctx.strokeRect(36, 28, 56, 88);
 		ctx.fillStyle = "#2a3540";
-		ctx.fillRect(114, 30, 18, 36);
-		ctx.fillRect(136, 30, 18, 36);
-		ctx.fillRect(114, 72, 18, 38);
-		ctx.fillRect(136, 72, 18, 38);
+		ctx.fillRect(42, 36, 20, 34);
+		ctx.fillRect(66, 36, 20, 34);
+		ctx.fillRect(42, 74, 20, 34);
+		ctx.fillRect(66, 74, 20, 34);
 		ctx.fillStyle = "#d4a84a";
 		ctx.beginPath();
-		ctx.arc(152, 82, 3, 0, Math.PI * 2);
+		ctx.arc(82, 78, 3, 0, Math.PI * 2);
 		ctx.fill();
 	} else {
-		for (let i = 0; i < 5; i++) pane(10 + i * 50, 18, 36, 58);
+		ctx.fillStyle = "#1c3a52";
+		ctx.fillRect(26, 22, 76, 78);
+		ctx.fillStyle = "#2a6a96";
+		ctx.fillRect(30, 26, 68, 70);
+		ctx.fillStyle = "rgba(190, 220, 240, 0.4)";
+		ctx.fillRect(30, 26, 28, 70);
+		ctx.strokeStyle = "#efe6d6";
+		ctx.lineWidth = 3;
+		ctx.strokeRect(30, 26, 68, 70);
+		ctx.beginPath();
+		ctx.moveTo(64, 26);
+		ctx.lineTo(64, 96);
+		ctx.moveTo(30, 61);
+		ctx.lineTo(98, 61);
+		ctx.stroke();
 	}
 	const tex = new THREE.CanvasTexture(c);
 	tex.colorSpace = THREE.SRGBColorSpace;
@@ -457,6 +454,8 @@ export class World3D {
 	private backMat: THREE.MeshStandardMaterial;
 	private aptFrontMat: THREE.MeshStandardMaterial;
 	private aptBackMat: THREE.MeshStandardMaterial;
+	private aptSideMat: THREE.MeshStandardMaterial;
+	private aptEdgeMat: THREE.MeshStandardMaterial;
 	private plasterMat: THREE.MeshStandardMaterial;
 	private aptMode = false;
 	constructor(canvas: HTMLCanvasElement) {
@@ -478,11 +477,14 @@ export class World3D {
 		this.camIso = new THREE.PerspectiveCamera(34, 1, .2, 4e3);
 		this.camZoom = new THREE.PerspectiveCamera(48, 1, .12, 2e3);
 		this.camTop = new THREE.OrthographicCamera(-10, 10, 10, -10, .2, 2e3);
-		this.scene.add(new THREE.HemisphereLight(0x9ec8f0, 0x4a6a38, 1.15));
-		const sun = new THREE.DirectionalLight(0xfff1d0, 1.7);
+		this.scene.add(new THREE.HemisphereLight(0xb8d4f0, 0x5a7048, 1.45));
+		const sun = new THREE.DirectionalLight(0xfff1d0, 1.35);
 		sun.position.set(-40, 80, 55);
 		this.scene.add(sun);
-		this.scene.add(new THREE.AmbientLight(0x8eb4d8, .28));
+		const fill = new THREE.DirectionalLight(0xd8e8ff, 0.9);
+		fill.position.set(60, 35, -45);
+		this.scene.add(fill);
+		this.scene.add(new THREE.AmbientLight(0xb0cce0, 0.58));
 		this.fireLight = new THREE.PointLight(0xff4a12, 0, 18, 2);
 		this.fireLight2 = new THREE.PointLight(0xffd070, 0, 10, 2);
 		this.scene.add(this.fireLight);
@@ -605,6 +607,25 @@ export class World3D {
 			roughness: 0.82,
 			metalness: 0,
 			color: 0xffffff,
+			transparent: false,
+			opacity: 1,
+			depthWrite: true,
+			side: THREE.DoubleSide,
+		});
+		this.aptSideMat = new THREE.MeshStandardMaterial({
+			map: this.brickMap,
+			roughness: 0.86,
+			metalness: 0,
+			color: 0xffffff,
+			transparent: false,
+			opacity: 1,
+			depthWrite: true,
+			side: THREE.DoubleSide,
+		});
+		this.aptEdgeMat = new THREE.MeshStandardMaterial({
+			color: 0xb45a38,
+			roughness: 0.9,
+			metalness: 0,
 			transparent: false,
 			opacity: 1,
 			depthWrite: true,
@@ -871,7 +892,7 @@ export class World3D {
 	private ensurePiece(p: Piece): THREE.Object3D {
 		let m = this.pieceMap.get(p.id);
 		if (m) return m;
-		if (p.kind === "log") m = this.makeLog();
+		if (p.kind === "log" || p.kind === "join") m = this.makeLog();
 		else if (p.kind === "tree") m = this.makeTree();
 		else if (p.kind === "couch") m = this.makeCouch();
 		else {
@@ -879,47 +900,62 @@ export class World3D {
 			const facadeLong = isWall && p.w > p.depth * 2;
 			const facadeSide = isWall && p.depth > p.w * 2 && (p.col === 0 || p.col === 4);
 			const interior = isWall && !facadeLong && !facadeSide;
-			const withDoor = facadeLong && p.z > 0.4 && (this.aptMode ? p.layer === 0 : p.layer < 5);
-			const mat = (
-				p.kind === "roof" ? this.roofMat :
-				interior ? this.plasterMat :
-				this.aptMode && withDoor ? this.aptFrontMat :
-				this.aptMode && isWall ? this.aptBackMat :
-				withDoor ? this.frontMat :
-				isWall ? this.backMat :
-				p.material === "wood" ? this.woodMat : this.steelMat
-			).clone();
-			if (isWall && !this.aptMode) {
-				mat.transparent = true;
-				mat.opacity = 0.88;
-				mat.depthWrite = true;
-				mat.side = THREE.DoubleSide;
-				mat.alphaTest = 0.04;
-				mat.roughness = 0.94;
-			} else if (isWall && this.aptMode) {
-				mat.transparent = false;
-				mat.opacity = 1;
-				mat.depthWrite = true;
-				mat.side = THREE.DoubleSide;
-				mat.roughness = interior ? 0.92 : 0.82;
+			const groundBay = this.aptMode && p.layer === 0 && p.y < 1.15;
+			const withDoor = facadeLong && p.z > 0.4 && (this.aptMode
+				? groundBay && Math.abs(p.x - 7) < 1.4
+				: p.col === 2 && p.layer < 5);
+			if (this.aptMode && isWall) {
+				const face = (withDoor ? this.aptFrontMat : facadeLong || facadeSide ? this.aptBackMat : this.plasterMat).clone();
+				const edge = this.aptEdgeMat.clone();
+				const brick = this.aptSideMat.clone();
+				let mats: THREE.Material[];
+				if (facadeLong) {
+					// Box faces: +X -X +Y -Y +Z -Z. Long walls face ±Z.
+					mats = [edge.clone(), edge.clone(), edge.clone(), edge.clone(), face, face.clone()];
+				} else if (facadeSide) {
+					const street = brick;
+					const inner = edge.clone();
+					mats = p.x < 2
+						? [inner, street, edge.clone(), edge.clone(), edge.clone(), edge.clone()]
+						: [street, inner, edge.clone(), edge.clone(), edge.clone(), edge.clone()];
+				} else {
+					mats = [this.plasterMat.clone(), this.plasterMat.clone(), edge.clone(), edge.clone(), this.plasterMat.clone(), this.plasterMat.clone()];
+				}
+				for (const mat of mats) {
+					const m = mat as THREE.MeshStandardMaterial;
+					m.transparent = false;
+					m.opacity = 1;
+					m.depthWrite = true;
+					m.side = THREE.DoubleSide;
+					m.roughness = interior ? 0.92 : 0.82;
+				}
+				m = new THREE.Mesh(this.boxGeo, mats);
+			} else {
+				const mat = (
+					p.kind === "roof" ? this.roofMat :
+					withDoor ? this.frontMat :
+					isWall ? this.backMat :
+					p.material === "wood" ? this.woodMat : this.steelMat
+				).clone();
+				if (isWall) {
+					mat.transparent = true;
+					mat.opacity = 0.88;
+					mat.depthWrite = true;
+					mat.side = THREE.DoubleSide;
+					mat.alphaTest = 0.04;
+					mat.roughness = 0.94;
+				}
+				m = new THREE.Mesh(this.boxGeo, mat);
 			}
-			m = new THREE.Mesh(this.boxGeo, mat);
 		}
 		this.pieceMap.set(p.id, m);
 		this.pieceGroup.add(m);
 		return m;
 	}
-	private makeLog(): THREE.Group {
-		const g = new THREE.Group();
-		for (let q = 0; q < 4; q++) {
-			const mat = this.woodMat.clone();
-			const mesh = new THREE.Mesh(this.logQuarterGeo, mat);
-			const a = q * Math.PI / 2 + Math.PI / 4;
-			mesh.rotation.y = q * Math.PI / 2;
-			mesh.position.set(Math.cos(a) * 0.1, 0, Math.sin(a) * 0.1);
-			g.add(mesh);
-		}
-		return g;
+	private makeLog(): THREE.Mesh {
+		// One short cylinder per physics section. Four of those make a stick
+		// (---- not —). Pie-slice quarters were a misread of "four pieces."
+		return new THREE.Mesh(this.logGeo, this.woodMat.clone());
 	}
 	private makeTree(): THREE.Group {
 		const g = new THREE.Group();
@@ -1011,7 +1047,7 @@ export class World3D {
 				const mat = mats[i];
 				if (p.kind === "roof" || p.kind === "wall") {
 					const char = 1 - p.intact;
-					mat.color.setRGB(1 - char * 0.55, 1 - char * 0.62, 1 - char * 0.68);
+					mat.color.setRGB(1 - char * 0.4, 1 - char * 0.48, 1 - char * 0.55);
 					if (p.kind === "wall" && !this.aptMode) {
 						mat.transparent = true;
 						mat.opacity = 0.88;
@@ -1048,13 +1084,14 @@ export class World3D {
 						0.14 * (1 - char) + wood[1] / 255 * char,
 						0.2 * (1 - char) + wood[2] / 255 * char,
 					);
-					mat.emissive.setRGB(.4 * heat + .2 * p.burning, .12 * heat + .05 * p.burning, .02);
-					mat.emissiveIntensity = p.burning * 0.65 + heat * .3;
-				} else if (p.kind === "log") {
-					const tint = 0.92 + (i % 4) * 0.035;
+					mat.emissive.setRGB(.55 * heat + .32 * p.burning, .14 * heat + .07 * p.burning, .02);
+					mat.emissiveIntensity = p.burning * 0.95 + heat * .42;
+				} else if (p.kind === "log" || p.kind === "join") {
+					const tint = p.kind === "join" ? 0.55 : 1;
 					mat.color.setRGB(wood[0] / 255 * tint, wood[1] / 255 * tint, wood[2] / 255 * tint);
-					mat.emissive.setRGB(.55 * heat + .35 * p.burning, .16 * heat + .08 * p.burning, .02);
-					mat.emissiveIntensity = p.burning * 1.6 + heat * .7;
+					// Coal glow, not a neon noodle. Charcoal has to read as black.
+					mat.emissive.setRGB(0.1 * p.burning, 0.03 * p.burning, 0.008);
+					mat.emissiveIntensity = p.burning * 0.18;
 				} else {
 					mat.color.copy(rgb(wood));
 					const glow = p.kind === "stud" || p.kind === "column" || p.kind === "slab" ? 0.45 : 1;
@@ -1062,11 +1099,12 @@ export class World3D {
 					mat.emissiveIntensity = (p.burning * 1.2 + heat * .5) * glow;
 				}
 			}
-			if (p.kind === "log") {
+			if (p.kind === "log" || p.kind === "join") {
+				const melted = p.kind === "join" && (p.temp >= 280 || p.intact <= 0.5);
 				const len = p.alongZ ? Math.max(p.w, p.depth) : p.w;
-				const r = Math.max(0.012, p.h * 0.48);
-				m.visible = p.h > 0.02;
-				m.scale.set(r, Math.max(len, .06), r);
+				const r = Math.max(0.012, p.h * (p.kind === "join" ? 0.38 : 0.5));
+				m.visible = p.h > 0.02 && !melted;
+				m.scale.set(r, Math.max(len, .05), r);
 				m.position.set(p.x, p.y, p.z);
 				if (p.alongZ) m.rotation.set(Math.PI / 2, 0, p.theta);
 				else m.rotation.set(0, 0, Math.PI / 2 + p.theta);
@@ -1230,8 +1268,17 @@ export class World3D {
 				if (apt && p.kind === "column" && p.z < 0.05) continue;
 				const spr = this.flames[n];
 				const flick = .85 + .18 * Math.sin(t * 11 + p.id);
-				const cap = p.kind === "tree" ? 1.05 : p.kind === "couch" ? 0.82 : p.kind === "log" ? 0.55 : 1.15;
-				const base = p.kind === "tree" ? Math.min(cap, p.h * 0.55) : p.kind === "couch" ? Math.min(cap, p.h * 0.95) : Math.min(cap, p.h * 0.42);
+				// Log h is the diameter (~15 cm). Tying flame height to that made a
+				// campfire that never rose. A section burns with a 0.6–1.4 m tongue.
+				const log = p.kind === "log";
+				const cap = p.kind === "tree" ? 1.05 : p.kind === "couch" ? 0.82 : log ? 1.45 : 1.15;
+				const base = p.kind === "tree"
+					? Math.min(cap, p.h * 0.55)
+					: p.kind === "couch"
+						? Math.min(cap, p.h * 0.95)
+						: log
+							? 0.62 + p.burning * 0.7
+							: Math.min(cap, p.h * 0.42);
 				const h = Math.max(.22, base + p.burning * .18) * flick;
 				const z = apt && p.kind === "column" ? frontZ + 0.12 : p.z;
 				spr.position.set(p.x, p.y + h * .22, z);
@@ -1296,34 +1343,64 @@ export class World3D {
 		const cgx = cx + (engine.phase === "idle" || engine.phase === "approach" ? 0 : engine.cgOffset());
 		const fog = this.scene.fog as THREE.Fog;
 		fog.color.setHex(HORIZON);
-		fog.near = engine.isPieces ? 16 : Math.max(80, H * .9);
-		fog.far = engine.isPieces ? 90 : Math.max(520, H * 3.4);
 		const bonfire = engine.scenario.shape === "bonfire";
-		const frontHalfW = engine.isPieces ? Math.max(W, pit ? 2.4 : W) * .72 : Math.max(W * .7, 18);
+		const house = engine.scenario.shape === "house";
+		const apt = engine.scenario.shape === "apartment";
+		const tower = engine.scenario.shape === "tower";
+		fog.near = apt ? 22 : engine.isPieces ? 16 : Math.max(80, H * .9);
+		fog.far = apt ? 120 : engine.isPieces ? 90 : Math.max(520, H * 3.4);
+		const tall = tower || apt;
+		const frontHalfW = tall
+			? W * 1.2
+			: engine.isPieces ? Math.max(W, pit ? 2.4 : W) * .72 : Math.max(W * .7, 18);
 		const frontHalfH = bonfire
 			? 1.45
-			: engine.isPieces ? Math.max(1.4, H * .7 + (pit?.depth ?? 0) * .55) : Math.max(H * .58, 40);
+			: tall
+				? H * 0.52
+				: engine.isPieces ? Math.max(1.4, H * .7 + (pit?.depth ?? 0) * .55) : Math.max(H * .58, 40);
 		if (bonfire) {
 			this.camFront.position.set(cx + sx * .1, 0.82, 9.5);
 			this.camFront.up.set(0, 1, 0);
 			this.camFront.lookAt(cx, 0.7, 0);
+		} else if (tall) {
+			// Front-ish, a little height so the plaza reads as a plane — but
+			// the plaza sits on the bottom of the frame, not a third of the
+			// way up with the shaft cropped.
+			this.camFront.position.set(cx + W * 0.28 + sx * .1, H * 0.54, tall && apt ? Math.max(36, H * 1.85) : H * 1.55);
+			this.camFront.up.set(0, 1, 0);
+			this.camFront.lookAt(cx, H * 0.50, 0);
 		} else {
-			this.camFront.position.set(cx + sx * .1, engine.isPieces ? H * .2 : H * .42, Math.max(20, H * 2.2));
+			this.camFront.position.set(cx + sx * .1, engine.isPieces ? H * .35 : H * .42, Math.max(20, H * 2.2));
 			this.camFront.up.set(0, 1, 0);
 			this.camFront.lookAt(cx, engine.isPieces ? Math.max(.1, H * .12) : H * .42, 0);
 		}
 		this.camFront.near = engine.isPieces ? .2 : 2;
-		this.camFront.far = engine.isPieces ? 80 : 5e3;
+		this.camFront.far = apt ? 160 : engine.isPieces ? 80 : 5e3;
 		this.camFront.userData.halfW = frontHalfW;
 		this.camFront.userData.halfH = frontHalfH;
 		const isoDist = bonfire
 			? 8.2
-			: engine.isPieces ? Math.max(16, Math.max(W, H + (pit?.depth ?? 0)) * 5.2) : Math.max(W * 4.4, H * 2.4);
-		const isoY = bonfire ? 2.05 : engine.isPieces ? Math.max(2.8, H * .7) : Math.max(8, H * .1);
+			: tower
+				? H * 2.05
+				: apt
+					? Math.max(48, H * 2.1)
+					: engine.isPieces ? Math.max(14, Math.max(W, H + (pit?.depth ?? 0)) * 2.4) : Math.max(W * 4.4, H * 2.4);
+		const fireY = tower
+			? Math.max(H * 0.22, Math.min(H * 0.9, engine.camY || H * 0.72))
+			: 0;
+		const isoY = bonfire ? 2.05 : tower ? fireY + H * 0.1 : apt ? H * 0.55 : engine.isPieces ? Math.max(3.2, H * .85) : Math.max(8, H * .1);
+		const isoLookY = bonfire ? 0.55 : tower ? fireY : apt ? H * 0.5 : engine.isPieces ? Math.max(.12, H * .18) : H * .38;
 		this.camIso.near = engine.isPieces ? .12 : 2;
-		this.camIso.far = engine.isPieces ? 120 : 5e3;
-		this.camIso.position.set(cx + (bonfire ? 3.4 : W * .95) + sx, isoY + sy, isoDist * (bonfire ? 1 : .9));
-		this.camIso.lookAt(cx, bonfire ? 0.55 : engine.isPieces ? Math.max(.12, H * .12) : H * .38, 0);
+		this.camIso.far = engine.isPieces ? 160 : 5e3;
+		this.camIso.up.set(0, 1, 0);
+		// Everything pane is a turntable around the target so the 3D is obvious.
+		const orbit = timeSec * (Math.PI * 2) / 32;
+		this.camIso.position.set(
+			cx + Math.sin(orbit) * isoDist,
+			isoY + sy,
+			Math.cos(orbit) * isoDist,
+		);
+		this.camIso.lookAt(cx, isoLookY, 0);
 		const halfFov = ((bonfire ? 42 : 42) * Math.PI) / 360;
 		const collapsing = !engine.isPieces && (engine.phase === "collapse" || engine.phase === "settled");
 		const actionSpan = engine.isPieces
@@ -1341,13 +1418,37 @@ export class World3D {
 			this.camZoom.position.set(engine.camX + 0.55, 1.65, 5.6);
 			this.camZoom.up.set(0, 1, 0);
 			this.camZoom.lookAt(engine.camX, 0.78, 0);
+		} else if (house) {
+			// UL living-room shot: tree left, couch right, one frame.
+			// The "behind the couch" cut was a wall. Outside only when it falls.
+			const tree = engine.pieces.find((p) => p.kind === "tree");
+			const couch = engine.pieces.find((p) => p.kind === "couch");
+			this.camZoom.up.set(0, 1, 0);
+			this.camZoom.near = 0.08;
+			this.camZoom.far = 40;
+			if (engine.houseCam !== "outside" && tree && couch) {
+				this.camZoom.fov = 58;
+				this.camZoom.position.set(5.15, 1.46, -2.15);
+				this.camZoom.lookAt(2.35, 0.88, 2.5);
+			} else {
+				this.camZoom.fov = 38;
+				this.camZoom.position.set(cx + W * 0.95, Math.max(2.6, H * 0.85), Math.max(13, W * 1.5));
+				this.camZoom.lookAt(cx, H * 0.28, 0);
+			}
+		} else if (apt) {
+			// Same rule as the towers: static 3/4, plaza at the bottom, whole stack in frame.
+			this.camZoom.fov = 36;
+			this.camZoom.near = 0.4;
+			this.camZoom.far = 160;
+			this.camZoom.up.set(0, 1, 0);
+			this.camZoom.position.set(cx + W * 0.75, H * 0.52, Math.max(28, H * 1.7));
+			this.camZoom.lookAt(cx, H * 0.48, 0);
 		} else {
 			this.camZoom.position.set(
 				engine.camX + sx * 0.3,
 				engine.camY + actionSpan * (collapsing ? 0.14 : 0.06) + sy * 0.25,
 				zoomDist,
 			);
-			this.camZoom.lookAt(engine.camX, engine.camY, 0);
 			this.camZoom.lookAt(engine.camX, engine.camY, 0);
 		}
 		const topHalf = Math.max(W, pit ? 2.6 : W) * .62;
@@ -1442,6 +1543,8 @@ export class World3D {
 		this.backMat.dispose();
 		this.aptFrontMat.dispose();
 		this.aptBackMat.dispose();
+		this.aptSideMat.dispose();
+		this.aptEdgeMat.dispose();
 		this.plasterMat.dispose();
 		if (this.floorMesh) this.floorMesh.dispose();
 		for (const m of this.pieceMap.values()) {

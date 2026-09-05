@@ -148,14 +148,14 @@ export function LabApp() {
               />
             </a>
             <div className="min-w-0">
-              <h1 className="text-xl font-semibold tracking-tight md:text-2xl">Collapse Lab</h1>
+              <h1 className="text-xl font-semibold tracking-tight md:text-2xl">9/11 Collapse Lab</h1>
               <a
                 href="https://x.com/GrumpyTechBro"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="font-mono text-2xs text-accent hover:text-fg"
               >
-                An @GrumpyTechBro joint
+                A GrumpyTechBro Joint
               </a>
             </div>
           </div>
@@ -249,8 +249,12 @@ function BriefingOverlay({ scenario, onIgnite }: { scenario: Scenario; onIgnite:
         <p className="mt-2 text-sm leading-relaxed md:text-base">{scenario.brief}</p>
         <p className="mt-2 text-sm text-muted">
           {scenario.shape === "tower"
-            ? "Fire walks one storey at a time — a burning floor heats the one above until it lights."
-            : "Neighbor heat: burning timber warms what’s within ~2 m. When that neighbor hits ignition temp, it lights."}
+            ? "Fire walks one story at a time — a burning floor heats the one above until it lights."
+            : scenario.shape === "bonfire"
+              ? "Neighbor heat: a burning log warms what it touches (~0.2 m), and fire rises. When a neighbor hits ignition temp, it lights."
+            : scenario.shape === "apartment"
+              ? "Room fire: the unit fills with hot gas. Next room through the wall, then the floor above — not a fuse up the face."
+              : "Neighbor heat: burning timber warms what it touches (~0.3 m), and fire rises. When a neighbor hits ignition temp, it lights."}
         </p>
         <Button onClick={onIgnite} className="mt-3 min-h-11 min-w-28">
           <Play className="ml-0.5" />
@@ -278,6 +282,11 @@ function FinishOverlay({
     <div className="absolute inset-x-0 top-0 z-30 p-3 md:p-4">
       <div className="overlay-in mx-auto max-w-2xl rounded-lg bg-surface/95 p-4 shadow-border">
         {scenario.group === "claim" ? <ClaimBody snap={snap} /> : <PathBody snap={snap} />}
+        <div className="mt-3">
+          <Fold title="Review events">
+            <EventLog events={snap.events} />
+          </Fold>
+        </div>
         <div className="mt-4 flex flex-wrap gap-2">
           {next && onNext ? (
             <Button onClick={onNext} className="min-h-11">
@@ -343,6 +352,24 @@ function ClaimBody({ snap }: { snap: SimSnapshot }) {
   );
 }
 
+function EventLog({ events }: { events: LogEvent[] }) {
+  if (events.length === 0) {
+    return <p className="text-sm text-muted">Nothing logged this run.</p>;
+  }
+  return (
+    <ol className="max-h-48 space-y-1.5 overflow-y-auto">
+      {events.map((e, i) => (
+        <li key={`${e.tMin}-${i}`} className="flex gap-2 text-sm leading-snug">
+          <span className="shrink-0 font-mono text-2xs tabular-nums text-muted">
+            {e.tMin < 0.05 ? "t0" : e.tMin < 10 ? `+${e.tMin.toFixed(1)}m` : `+${e.tMin.toFixed(0)}m`}
+          </span>
+          <span>{e.text}</span>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
 function Fold({ title, defaultOpen = false, children }: { title: string; defaultOpen?: boolean; children: ReactNode }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
@@ -368,7 +395,7 @@ function Integrator({ snap, scenario }: { snap: SimSnapshot | null; scenario: Sc
     <div>
       <p className="text-sm leading-relaxed">
         Every frame runs the same three laws. Fire does not paint a wall. A burning member warms its neighbors
-        (about 2 m in the house, a bay in the apartment, one storey in the towers). When a neighbor’s temperature
+        (about 0.2 m in the crib — fire rises — a hand’s reach in the house, the next bay in the apartment, one story in the towers). When a neighbor’s temperature
         passes ignition, that neighbor lights. Tree → couch → room is the same rule as floor 93 → 94.
       </p>
       <pre className="mt-3 overflow-x-auto rounded-sm bg-bg px-3 py-2 font-mono text-2xs leading-relaxed text-muted">
@@ -590,7 +617,7 @@ function Telemetry({ snap, scenario }: { snap: SimSnapshot | null; scenario: Sce
   ];
   if (showImpact) {
     items.push({
-      k: "Impact storey",
+      k: "Impact story",
       v: `${snap.impactLo}–${snap.impactHi}`,
       hint: "Floors the jet actually cut. North 93–99, South 77–85. Both jets punched the core. “Only one face was damaged” is the claim, not the floor plate.",
     });
@@ -605,7 +632,7 @@ function Telemetry({ snap, scenario }: { snap: SimSnapshot | null; scenario: Sce
   items.push({
     k: "Initiation",
     v: snap.initiationMin === null ? "—" : `${snap.initiationMin.toFixed(0)} min`,
-    hint: "When the first storey lost enough capacity that the upper block started to drop. Empty until that happens.",
+    hint: "When the first story lost enough capacity that the upper block started to drop. Empty until that happens.",
   });
   items.push({
     k: "Members",
@@ -615,12 +642,12 @@ function Telemetry({ snap, scenario }: { snap: SimSnapshot | null; scenario: Sce
   items.push({
     k: "Fire spread",
     v: scenario.noFire ? "off" : "neighbor heat",
-    hint: "A burning member warms others within a couple of metres. When a neighbor passes ignition temperature, it lights. Nothing paints a whole wall on.",
+    hint: "A burning member warms what it touches, and fire rises. When a neighbor passes ignition temperature, it lights. Nothing paints a whole wall on.",
   });
   items.push({
     k: "KE",
     v: snap.keJ > 1e6 ? `${(snap.keJ / 1e9).toFixed(2)} GJ` : snap.keJ > 1 ? `${(snap.keJ / 1e3).toFixed(0)} kJ` : "0",
-    hint: "Kinetic energy of the falling block or loose members. ½mv². This is what eats the storey below.",
+    hint: "Kinetic energy of the falling block or loose members. ½mv². This is what eats the story below.",
   });
   const f = snap.faces;
   return (
@@ -672,7 +699,7 @@ function Telemetry({ snap, scenario }: { snap: SimSnapshot | null; scenario: Sce
       <div className="mt-3 space-y-2">
         <CapBar
           label="Fire side"
-          hint="Remaining axial capacity of the columns on the fire face, as a fraction of design. Below 1.0 they cannot carry the storeys above."
+          hint="Remaining axial capacity of the columns on the fire face, as a fraction of design. Below 1.0 they cannot carry the stories above."
           value={snap.leftCap}
         />
         <CapBar
