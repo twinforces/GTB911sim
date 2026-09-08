@@ -2,6 +2,12 @@
 
 Long-term history. What / Why / How. Git hashes filled in after commits.
 
+## 2026-09-08 — WTC 7, no NIST keyframe
+
+- **What:** WTC 7 is a claim run: 47 stories, debris fires on 7–9, no airplane, columns uncut. Impact-only no longer drops if you leave it idle. Tower fire walks because the floor above is hot. Collapse is capacity < load.
+- **Why:** The NIST clock was forcing a drop at 105% of stand time and holding one off until 72%. That was a video. WTC 7 is the building that came down from fire.
+- **How:** Deleted climbMinutes unlock and the 0.72 / 1.05 gates. `spreadFire` plumes up one story. `wtc7` in `scenarios.ts`.
+
 ## 2026-09-04 — Publish: 9/11 Collapse Lab
 
 - **What:** Title is 9/11 Collapse Lab. Logs are four sections + three heat-tracking joins. Collisions are inelastic. House fire is tree, then couch, then timber. Apartment is a room fire: next room through the wall, then up; unprotected steel fails ~575 °C; that bay pancakes; the rest of the building stays a building. Four panes labeled Front / Everything (orbits) / Action / Top. Event log in the end dialog. Story, not Storey.

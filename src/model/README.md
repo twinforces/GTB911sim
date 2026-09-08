@@ -8,7 +8,7 @@ If you are here to prove the lab is a video, pick the accusation and open the fi
 | --- | --- | --- |
 | Gravity is faked | `constants.ts`, `pieces.ts` | `G = 9.81`. `integratePieces` does `vy -= G * dt`. |
 | Fire Speed also speeds the collapse | `engine.ts` `step()` | Heat is multiplied by `speed`. Falling is not. |
-| The fire is painted on a whole wall | `pieces.ts` `spreadPieces`, `engine.ts` `spreadFire` | A burning member warms neighbors. They light when *they* pass ignition temperature. |
+| The fire is painted on a whole wall | `pieces.ts` `spreadPieces`, `engine.ts` `spreadFire` | A burning member warms neighbors, including the floor above. They light when *they* pass ignition temperature. No clock unlocks story 94. |
 | The Christmas tree lights the whole house | `pieces.ts` `ignitePieces` + `spreadPieces` | Ignition is the tree only. The tree cannot heat anything but the couch until the couch is lit. |
 | Members fly sideways (demolition) | `pieces.ts` `unlockPiece` | `drop = true` zeroes `vx` and `vz`. Houses and apartments always drop. |
 | Wall panels jump around | `pieces.ts` `integratePieces` / `zNear` | SAT is 2D in x-y. Front and back walls share x,y. Without a z test they explode apart. Restitution is 0. |
@@ -21,7 +21,7 @@ If you are here to prove the lab is a video, pick the accusation and open the fi
 | Steel “melts” | `steel.ts` `fyFactor` | Eurocode 3 Table 3.1. Yield is gone by 1200 °C. Steel melts near 1500 °C. Office fires never get there. We reduce *strength*, we do not melt columns. |
 | The tower is pre-leaned so it tips | `engine.ts` `standingLean()` | Returns **0** for the standing shaft. CGrav offset is a number in metres, not a banana. |
 | Rigid tree and crush are the same clip | `scenarios.ts` (`tree` vs `north`) + `engine.ts` `initiate()` | `crush: false` hinges the upper block. That is the cartoon. `crush: true` drops it through the footprint. |
-| NIST time is a forced target | `engine.ts` `evaluateStructure` | NIST minutes are a *comparison*. The integrator is not keyed to hit 102:00. |
+| NIST time is a forced target | `engine.ts` `evaluateStructure` | NIST minutes are a *comparison* on the HUD. Collapse is `capacity < load`. No hold-until-72%, no force-at-105%. |
 | Center Gravity is decorative | `pieces.ts` `pieceCgrav`, `engine.ts` `cgOffset` | Mass-weighted. Telemetry is that number. |
 
 ## How a step works (pieces world)
@@ -33,7 +33,7 @@ If you are here to prove the lab is a video, pick the accusation and open the fi
 ## How a step works (tower world)
 
 1. `stepFire(dt * FireSpeed)` — heat columns, walk fire one story at a time, Eurocode 3 remaining yield.
-2. `evaluateStructure` — if remaining capacity < load, `initiate`.
+2. `evaluateStructure` — if remaining capacity < load, `initiate`. NIST minutes are not a gate.
 3. `stepCollapse(dt)` — Bazant-style crush, or a hinge if you turned crush off.
 
 ## What this is not

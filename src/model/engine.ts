@@ -14,8 +14,8 @@
  * Accusation map:
  *   Fire Speed speeds collapse -> step(): heat uses speed, motion does not
  *   tower is pre-leaned        -> standingLean() returns 0
- *   fire painted on floors     -> spreadFire / climbMinutes (one story at a time)
- *   NIST time is a forced hit  -> evaluateStructure uses it as a comparison, not a keyframe
+ *   fire painted on floors     -> spreadFire (neighbor heat, including the floor above)
+ *   NIST time is a forced hit  -> evaluateStructure: remaining capacity < load. Clock is HUD.
  *   CGrav is decoration        -> cgOffset() / pieceCgrav
  */
 import { COLS, COL_X, G, SF, TRIB } from "./constants.ts";
@@ -615,15 +615,18 @@ export class SimEngine {
     const apt = this.scenario.shape === "apartment";
     const aptCorner = apt && loose < this.pieces.length * 0.45;
     const bonfire = this.scenario.shape === "bonfire";
+    const noFireStood = this.scenario.noFire;
     const title = bonfire
       ? "In the pit"
       : houseStanding
         ? "Still a house"
         : this.scenario.shape === "house"
           ? "Burned down"
-          : aptCorner
-            ? "Corner bay down"
-            : "Rubble";
+          : noFireStood
+            ? "Didn't collapse"
+            : aptCorner
+              ? "Corner bay down"
+              : "Rubble";
     this.pushBubble(
       this.width / 2,
       Math.max(0.4, this.height * 0.2),
@@ -634,12 +637,14 @@ export class SimEngine {
           ? `Fire ran ${min.toFixed(0)} min. Tree, then the couch, then the timber. The roof is still a roof. CGrav stayed over the footprint.`
           : this.scenario.shape === "house"
             ? `Fire ran ${min.toFixed(0)} min. Timber charred, roof in the footprint. CGrav x = ${cg.x.toFixed(2)} m.`
-            : aptCorner
-              ? `Fire ran ${min.toFixed(0)} min. Unprotected steel in the fire unit lost yield. That bay dropped. The rest of the building is still a building. CGrav x = ${cg.x.toFixed(2)} m.`
-              : inside
-                ? `Fire ran ${min.toFixed(0)} min. Things made of pieces form a pile. CGrav stayed over the ${this.pit ? "pit" : "footprint"}.`
-                : "The pile walked — check crush / hinge assumptions.",
-      inside ? "ok" : "warn",
+            : noFireStood
+              ? `Same gash, no fire, ${min.toFixed(0)} min. Residual capacity held. Impact was not enough.`
+              : aptCorner
+                ? `Fire ran ${min.toFixed(0)} min. Unprotected steel in the fire unit lost yield. That bay dropped. The rest of the building is still a building. CGrav x = ${cg.x.toFixed(2)} m.`
+                : inside
+                  ? `Fire ran ${min.toFixed(0)} min. Things made of pieces form a pile. CGrav stayed over the ${this.pit ? "pit" : "footprint"}.`
+                  : "The pile walked — check crush / hinge assumptions.",
+      noFireStood || inside ? "ok" : "warn",
       10,
     );
     this.log(
@@ -650,10 +655,12 @@ export class SimEngine {
           ? `Fire spread through the house. Roof stayed. CGrav x = ${cg.x.toFixed(2)} m.`
           : this.scenario.shape === "house"
             ? `House burned down. Roof in the footprint. CGrav x = ${cg.x.toFixed(2)} m.`
-            : aptCorner
-              ? `Corner bay pancaked. Rest of the building still standing. CGrav x = ${cg.x.toFixed(2)} m.`
-              : `Settled as rubble. CGrav x = ${cg.x.toFixed(2)} m.`,
-      inside ? "ok" : "warn",
+            : noFireStood
+              ? `Didn't collapse. Residual capacity held. Impact was not enough.`
+              : aptCorner
+                ? `Corner bay pancaked. Rest of the building still standing. CGrav x = ${cg.x.toFixed(2)} m.`
+                : `Settled as rubble. CGrav x = ${cg.x.toFixed(2)} m.`,
+      noFireStood || inside ? "ok" : "warn",
     );
   }
 
@@ -860,7 +867,9 @@ export class SimEngine {
 
     const gash = s.impactHi - s.impactLo + 1;
     const hourNote = s.nistMinutes > 0
-      ? ` Historically ${s.nistMinutes} min of fire. Elevator shafts are chimneys — it walks up one story at a time.`
+      ? s.hasPlane
+        ? ` Historically ${s.nistMinutes} min of fire. Elevator shafts are chimneys — it walks up one story at a time.`
+        : ` Historically ${s.nistMinutes} min of fire (NIST NCSTAR 1A). No airplane.`
       : "";
     this.pushBubble(
       this.width * 0.18,
@@ -868,7 +877,7 @@ export class SimEngine {
       sever ? "Impact" : "Ignition",
       sever
         ? `${gash} floors punched. Perimeter + core severed on the inbound face. Fire on story ${s.impactLo}.${hourNote}`
-        : `Fire on story ${s.impactLo}. The floors above are sitting on this one. They will not hover.`,
+        : `Debris fires on stories ${s.impactLo}–${s.impactHi}. No airplane. The floors above are sitting on these.${hourNote}`,
       "critical",
       6.5,
     );
@@ -876,7 +885,7 @@ export class SimEngine {
       0,
       sever
         ? `Impact floors ${s.impactLo}–${s.impactHi}. Columns cut on the inbound face and into the core. Fire starts on story ${s.impactLo}.${s.nistMinutes > 0 ? ` NIST stand time ${s.nistMinutes} min.` : ""}`
-        : `Ignition on story ${s.impactLo}. Insulation stripped on the fire face.`,
+        : `Ignition on stories ${s.impactLo}–${s.impactHi}. No airplane. Insulation stripped on the fire face.${s.nistMinutes > 0 ? ` NIST stand time ${s.nistMinutes} min.` : ""}`,
       "critical",
     );
     this.camTX = this.width * 0.28;
@@ -932,50 +941,53 @@ export class SimEngine {
 
   /**
    * Minutes of heating before the next story is allowed to light.
-   * What: (NIST minutes * 0.88) / (impact belt + a few floors).
-   * Why: North stood ~102 min, South ~56. The hour is a climbing front,
-   * not a single flashover of 110 floors. This is a time *scale* for the
-   * teaching model, not a keyframe that forces initiation at 102:00.
+   * Removed: that was a clock gate. Fire walks because the floor above
+   * is hot, not because `minutes / climbMin` unlocked it.
    */
-  private climbMinutes(): number {
+  private announceFireFront(): void {
     const s = this.scenario;
-    if (s.nistMinutes <= 0) return 8;
-    // North 102 min, South 56 min. Walk the impact belt plus a few floors
-    // above so the hour is a climbing front, not a single flash.
-    const walk = Math.max(8, s.impactHi - s.impactLo + 6);
-    return Math.max(4, (s.nistMinutes * 0.88) / walk);
-  }
-
-  private igniteStory(story: number, intensity: number): boolean {
-    const f = this.floors[story - 1];
-    if (!f || f.state !== "stacked") return false;
-    let any = false;
-    for (let c = 0; c < COLS; c++) {
-      if (f.cols[c].fuel < 0.06) continue;
-      const face = c <= 2 ? 1 : 0.28;
-      f.cols[c].burning = Math.max(f.cols[c].burning, intensity * face);
-      f.cols[c].stripped = Math.max(f.cols[c].stripped, 0.35 * face);
-      f.cols[c].fuel = Math.max(f.cols[c].fuel, 0.88);
-      any = true;
+    if (s.fireSpread <= 0) return;
+    let hi = s.impactLo;
+    for (let i = 0; i < this.floors.length; i++) {
+      if (this.floors[i].cols.some((c) => c.burning > 0.22)) hi = Math.max(hi, i + 1);
     }
-    return any;
+    if (hi <= this.fireFloorAnnounced) return;
+    const next = this.fireFloorAnnounced + 1;
+    this.fireFloorAnnounced = next;
+    const minutes = this.t / 60;
+    const y = next * this.floorH;
+    this.camTY = y;
+    this.camTX = this.width * 0.34;
+    this.pushBubble(
+      this.width * 0.5,
+      y,
+      `Fire on story ${next}`,
+      next <= s.impactHi
+        ? `Story ${next} caught from the one below. Jet fuel opened the belt; the hour is the fire walking it.`
+        : "One floor at a time. Elevator shafts are chimneys. The hour is the fire walking up.",
+      "fire",
+      7,
+    );
+    this.log(minutes, `Fire on story ${next} at ${minutes.toFixed(0)} min.`, "fire");
+    for (let k = 0; k < 18; k++) {
+      this.spawn("fire", this.width * (0.12 + hash(k + next) * 0.7), y + (hash(k) - 0.3) * this.floorH, 10, 22);
+      this.spawn("smoke", this.width * (0.2 + hash(k + 9) * 0.55), y + this.floorH * 0.6, 4, 14);
+    }
   }
 
   /**
    * Tower fire. Same neighbor-heat idea as spreadPieces, on five column groups.
-   * Horizontal leak to adjacent groups; a little downward; upward is gated
-   * by climbMinutes so the fire walks one story at a time.
+   * Horizontal leak to adjacent groups; a little downward; upward is a plume
+   * into the story above — elevator shafts are chimneys, not a fuse.
    *
    * CRITIC: "You lit the whole shaft."
-   * `unlocked = impactLo + floor(minutes / climbMin)`. Story 94 cannot
-   * flash because 93 is pretty. It flashes when the clock has paid for it.
+   * A story lights when its steel is hot, from the fire below. We do not
+   * unlock story 94 because the clock paid for it.
    */
   private spreadFire(dt: number): void {
     const s = this.scenario;
     const spread = s.fireSpread;
     const alight = this.floors.map((f) => f.cols.map((c) => c.burning > 0.22 && c.fuel > 0.05));
-    const minutes = this.t / 60;
-    const climbMin = this.climbMinutes();
 
     for (let i = 0; i < this.floors.length; i++) {
       const f = this.floors[i];
@@ -1010,38 +1022,20 @@ export class SimEngine {
             nbr.stripped = Math.max(nbr.stripped, 0.18);
           }
         }
-      }
-    }
-
-    if (spread <= 0) return;
-
-    const unlocked = s.impactLo + Math.floor(minutes / climbMin);
-    const cap = Math.min(this.floors.length, s.impactHi + 7);
-    const next = this.fireFloorAnnounced + 1;
-    if (next <= unlocked && next <= cap) {
-      if (this.igniteStory(next, 0.7)) {
-        this.fireFloorAnnounced = next;
-        this.trauma = Math.max(this.trauma, 0.55);
-        const y = next * this.floorH;
-        this.camTY = y;
-        this.camTX = this.width * 0.34;
-        this.pushBubble(
-          this.width * 0.5,
-          y,
-          `Fire on story ${next}`,
-          next <= s.impactHi
-            ? `Story ${next} flashes over. Jet fuel opened the belt; the hour is the fire walking it.`
-            : "One floor at a time. Elevator shafts are chimneys. The hour is the fire walking up.",
-          "fire",
-          7,
-        );
-        this.log(minutes, `Fire on story ${next} at ${minutes.toFixed(0)} min.`, "fire");
-        for (let k = 0; k < 18; k++) {
-          this.spawn("fire", this.width * (0.12 + hash(k + next) * 0.7), y + (hash(k) - 0.3) * this.floorH, 10, 22);
-          this.spawn("smoke", this.width * (0.2 + hash(k + 9) * 0.55), y + this.floorH * 0.6, 4, 14);
+        if (spread > 0) {
+          const up = this.floors[i + 1];
+          if (up && up.state === "stacked") {
+            const nbr = up.cols[c];
+            nbr.temp += 0.45 * col.burning * dt;
+            if (nbr.temp > 220 && nbr.fuel > 0.1) {
+              nbr.burning = Math.max(nbr.burning, 0.28);
+              nbr.stripped = Math.max(nbr.stripped, 0.3);
+            }
+          }
         }
       }
     }
+    this.announceFireFront();
   }
 
   private trackFireFront(): void {
@@ -1116,17 +1110,12 @@ export class SimEngine {
       }
 
       if (ratio < 1) {
-        if (s.nistMinutes > 0 && this.t / 60 < s.nistMinutes * 0.72) {
-          continue;
-        }
+        if (s.noFire) continue;
         const cgSupport = cap > 1 ? moment / cap : 0;
         const theta = Math.atan2(-cgSupport, this.width * 0.45);
         this.initiate(i, theta);
         return;
       }
-    }
-    if (s.nistMinutes > 0 && this.t / 60 >= s.nistMinutes * 1.05) {
-      this.initiate(s.impactLo - 1, 0);
     }
   }
 
@@ -1157,6 +1146,7 @@ export class SimEngine {
    */
   private initiate(floorIndex: number, theta: number): void {
     if (this.phase !== "fire") return;
+    if (this.scenario.noFire) return;
     const s = this.scenario;
     this.phase = "collapse";
     this.initiationT = this.t;
@@ -1489,6 +1479,9 @@ export class SimEngine {
         8,
       );
       this.log(min, "No fire. Tower remains standing on residual capacity.", "ok");
+    }
+    if (s.noFire && this.stoodAnnounced && min > 24 && this.phase === "fire") {
+      this.settlePieces();
     }
     if (!this.spreadAnnounced && farFire > 0 && s.fireSpread > 0) {
       this.spreadAnnounced = true;

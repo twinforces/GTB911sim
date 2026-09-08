@@ -40,6 +40,16 @@ describe("claim runs", () => {
     assert.equal(scenarioById("north").noFire, false);
   });
 
+  it("WTC 7 is fire, no plane, 47 stories, columns not pre-cut", () => {
+    const s = scenarioById("wtc7");
+    assert.equal(s.hasPlane, false);
+    assert.equal(s.noFire, false);
+    assert.equal(s.floors, 47);
+    assert.equal(s.crush, true);
+    assert.ok(s.impactIntact.every((v) => v === 1), "no airplane gash");
+    assert.equal(scenarioById("south").nextId, "wtc7");
+  });
+
   it("fire-stays-put still has fire, but fireSpread = 0", () => {
     const s = scenarioById("stays");
     assert.equal(s.noFire, false);

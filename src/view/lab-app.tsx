@@ -281,7 +281,7 @@ function FinishOverlay({
   return (
     <div className="absolute inset-x-0 top-0 z-30 p-3 md:p-4">
       <div className="overlay-in mx-auto max-w-2xl rounded-lg bg-surface/95 p-4 shadow-border">
-        {scenario.group === "claim" ? <ClaimBody snap={snap} /> : <PathBody snap={snap} />}
+        {scenario.group === "claim" ? <ClaimBody snap={snap} scenario={scenario} /> : <PathBody snap={snap} />}
         <div className="mt-3">
           <Fold title="Review events">
             <EventLog events={snap.events} />
@@ -313,13 +313,13 @@ function PathBody({ snap }: { snap: SimSnapshot }) {
   );
 }
 
-function ClaimBody({ snap }: { snap: SimSnapshot }) {
+function ClaimBody({ snap, scenario }: { snap: SimSnapshot; scenario: Scenario }) {
   const rot = Math.abs(snap.rotationDeg);
   const cg = Math.abs(snap.cgOffsetM);
   const need = (Math.atan2(snap.halfWidth, Math.max(40, snap.heightM * 0.45)) * 180) / Math.PI;
   const idle = snap.phase === "idle" || snap.phase === "approach";
   const rows = [
-    { k: "Damaged face softens first", v: idle ? "—" : "Yes", ok: true },
+    { k: scenario.hasPlane ? "Damaged face softens first" : "Fire side softens first", v: idle ? "—" : "Yes", ok: true },
     { k: "Center Gravity walks off-center", v: idle ? "—" : `${cg.toFixed(1)} m`, ok: true },
     {
       k: `CGrav leaves ${snap.halfWidth.toFixed(snap.halfWidth < 10 ? 1 : 0)} m half-width`,
@@ -336,8 +336,9 @@ function ClaimBody({ snap }: { snap: SimSnapshot }) {
     <>
       <p className="font-mono text-2xs uppercase tracking-wider text-muted">The claim</p>
       <p className="mt-2 text-sm leading-relaxed">
-        One face was hit, so that face buckles first, Center Gravity walks off midline, and a footprint collapse is
-        impossible.
+        {scenario.hasPlane
+          ? "One face was hit, so that face buckles first, Center Gravity walks off midline, and a footprint collapse is impossible."
+          : "No airplane. Fire on one side. Footprint collapse, gravity wins."}
       </p>
       <ul className="mt-3 space-y-2">
         {rows.map((r) => (
@@ -617,16 +618,20 @@ function Telemetry({ snap, scenario }: { snap: SimSnapshot | null; scenario: Sce
   ];
   if (showImpact) {
     items.push({
-      k: "Impact story",
+      k: scenario.hasPlane ? "Impact story" : "Fire stories",
       v: `${snap.impactLo}–${snap.impactHi}`,
-      hint: "Floors the jet actually cut. North 93–99, South 77–85. Both jets punched the core. “Only one face was damaged” is the claim, not the floor plate.",
+      hint: scenario.hasPlane
+        ? "Floors the jet actually cut. North 93–99, South 77–85. Both jets punched the core. “Only one face was damaged” is the claim, not the floor plate."
+        : "Floors that start on fire. WTC 7: debris fires on 7–9, no airplane. Fire walks from there.",
     });
   }
   if (snap.nistMinutes > 0) {
     items.push({
       k: "NIST time",
       v: `${snap.nistMinutes} min`,
-      hint: "How long the real tower stood after impact (NIST NCSTAR 1). A comparison, not a target the integrator is forced to hit.",
+      hint: scenario.hasPlane
+        ? "How long the real tower stood after impact (NIST NCSTAR 1). A comparison, not a target the integrator is forced to hit."
+        : "How long WTC 7 stood after the fires started (NIST NCSTAR 1A, ~7 hours). A comparison, not a target.",
     });
   }
   items.push({
@@ -664,7 +669,7 @@ function Telemetry({ snap, scenario }: { snap: SimSnapshot | null; scenario: Sce
       </dl>
       <div className="mt-3 grid grid-cols-4 gap-2 font-mono text-2xs tabular-nums">
         <FaceStat
-          label={scenario.shape === "bonfire" ? "Kerosene" : scenario.hasPlane ? "Hit" : scenario.shape === "house" ? "Tree" : "Fire"}
+          label={scenario.shape === "bonfire" ? "Kerosene" : scenario.hasPlane ? "Hit" : scenario.shape === "house" ? "Tree" : scenario.shape === "tower" ? "Fire" : "Fire"}
           hint={
             scenario.shape === "bonfire"
               ? "The corner the match was put to. Temperature and remaining wood strength on that face of the pile."
@@ -672,7 +677,9 @@ function Telemetry({ snap, scenario }: { snap: SimSnapshot | null; scenario: Sce
                 ? "Inbound face the aircraft hit. Temperature and remaining yield of those columns."
                 : scenario.shape === "house"
                   ? "The Christmas tree. Dry tree, one match. Temperature and remaining wood of that corner of the room."
-                  : "The room that was ignited. Temperature and remaining wood strength."
+                  : scenario.shape === "tower"
+                    ? "Lower floors that started on fire. No airplane. Temperature and remaining yield of those columns."
+                    : "The room that was ignited. Temperature and remaining wood strength."
           }
           face={f.impact}
         />

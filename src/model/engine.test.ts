@@ -186,3 +186,121 @@ describe("pieces fall instead of shrinking", () => {
     assert.ok(greenLocked.length > 0, "green timber is still a house");
   });
 });
+
+describe("impact only", () => {
+  it("does not collapse if you leave it idle past the NIST clock", () => {
+    const e = new SimEngine(scenarioById("nofire"));
+    e.play();
+    (e as unknown as { seedWound: (sever: boolean) => void }).seedWound(true);
+    e.setSpeed(240);
+    for (let i = 0; i < 2200; i++) e.step(1 / 60);
+    assert.notEqual(e.phase, "collapse", `NIST clock must not keyframe a drop (t=${(e.t / 60).toFixed(0)} min, phase=${e.phase})`);
+    assert.equal(e.block, null, "no falling block");
+    assert.ok(
+      e.events.some((ev) => /standing|Didn't collapse|not enough/i.test(ev.text)),
+      `should have said it stood, got: ${e.events.map((ev) => ev.text).join(" | ")}`,
+    );
+    assert.ok(
+      !e.events.some((ev) => /Settled as rubble|Progressive collapse/i.test(ev.text)),
+      "must not call a standing tower rubble",
+    );
+  });
+});
+
+describe("tower fire is not a NIST keyframe", () => {
+  const wound = (e: SimEngine) =>
+    (e as unknown as { seedWound: (sever: boolean) => void }).seedWound(true);
+
+  it("does not drop a cold North Tower at 108 minutes", () => {
+    const e = new SimEngine(scenarioById("north"));
+    e.play();
+    wound(e);
+    for (const f of e.floors) {
+      for (const c of f.cols) {
+        c.temp = 22;
+        c.burning = 0;
+        c.sag = 0;
+        c.bow = 0;
+      }
+    }
+    e.t = 108 * 60;
+    e.setSpeed(1);
+    e.paused = false;
+    for (let i = 0; i < 8; i++) e.step(1 / 60);
+    assert.equal(e.phase, "fire", `cold steel at 108 min must still stand (phase=${e.phase})`);
+    assert.equal(e.block, null);
+  });
+
+  it("walks fire to the story above because that story is hot, not because the clock paid", () => {
+    const e = new SimEngine(scenarioById("north"));
+    e.play();
+    wound(e);
+    const above = e.scenario.impactLo; // 0-index: impactLo is story 93, floors[92], above is floors[93]
+    const fireFloor = e.floors[e.scenario.impactLo - 1];
+    const nextFloor = e.floors[e.scenario.impactLo];
+    assert.ok(fireFloor.cols.some((c) => c.burning > 0.2), "impact story is the match");
+    assert.ok(
+      nextFloor.cols.every((c) => c.burning < 0.2),
+      "story 94 is not pre-lit",
+    );
+    e.setSpeed(240);
+    for (let i = 0; i < 400; i++) e.step(1 / 60);
+    if (e.phase === "collapse") return;
+    const hot = nextFloor.cols.filter((c) => c.temp > 80 || c.burning > 0.1);
+    assert.ok(hot.length >= 1, `plume should warm story ${above + 1} (got ${hot.length} hot, t=${(e.t / 60).toFixed(0)} min)`);
+  });
+
+  it("drops when remaining yield cannot carry the load — not at a NIST timestamp", () => {
+    const e = new SimEngine(scenarioById("north"));
+    e.play();
+    wound(e);
+    const f = e.floors[e.scenario.impactLo - 1];
+    for (const c of f.cols) {
+      c.temp = 720;
+      c.burning = 1;
+      c.stripped = 1;
+      c.sag = 0.8;
+      c.bow = 0.7;
+    }
+    e.setSpeed(1);
+    e.paused = false;
+    for (let i = 0; i < 12; i++) e.step(1 / 60);
+    assert.equal(e.phase, "collapse", "hot damaged belt must be a story mechanism");
+    assert.ok(e.initiationT !== null);
+    assert.ok(e.initiationT! < 5, `must not wait for 72% of 102 min (initiated at ${e.initiationT}s)`);
+  });
+});
+
+describe("WTC 7", () => {
+  it("ignites with no plane and uncut columns", () => {
+    const e = new SimEngine(scenarioById("wtc7"));
+    e.play();
+    assert.equal(e.phase, "fire");
+    assert.equal(e.plane.alive, false);
+    const fireFloor = e.floors[6];
+    assert.ok(fireFloor.cols.some((c) => c.burning > 0.2), "stories 7–9 start on fire");
+    assert.ok(
+      e.floors.every((f) => f.cols.every((c) => c.intact > 0.99)),
+      "no airplane gash — intact stays 1",
+    );
+    const high = e.floors[20];
+    assert.ok(high.cols.every((c) => c.burning < 0.05), "story 21 is not pre-lit");
+  });
+
+  it("drops when the fire floor loses yield, with no plane cut", () => {
+    const e = new SimEngine(scenarioById("wtc7"));
+    e.play();
+    const f = e.floors[6];
+    for (const c of f.cols) {
+      c.temp = 740;
+      c.burning = 1;
+      c.stripped = 1;
+      c.sag = 0.75;
+      c.bow = 0.65;
+    }
+    e.setSpeed(1);
+    for (let i = 0; i < 12; i++) e.step(1 / 60);
+    assert.equal(e.phase, "collapse", "intact columns still fail when yield is gone");
+    assert.ok(e.block && !e.block.hinged, "crush is on — not a cartoon tip");
+  });
+});

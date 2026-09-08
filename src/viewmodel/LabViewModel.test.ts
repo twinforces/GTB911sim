@@ -105,6 +105,14 @@ describe("commands", () => {
     assert.equal(state.wood, false);
     assert.equal(state.scenario.hasPlane, true);
   });
+
+  it("WTC 7 labels the button Ignite — there is no airplane", () => {
+    const vm = new LabViewModel("wtc7");
+    const state = vm.getState();
+    assert.equal(state.igniteLabel, "Ignite");
+    assert.equal(state.scenario.hasPlane, false);
+    assert.equal(state.wood, false);
+  });
 });
 
 describe("advance", () => {

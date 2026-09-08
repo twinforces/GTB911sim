@@ -7,7 +7,7 @@
  * "video" theory were true, those two runs would be the same clip.
  *
  * PATH  = bonfire -> 1-story -> 2-story -> apartment  (things you have seen)
- * CLAIM = North, South, fire-stays-put, impact-only, rigid-tree
+ * CLAIM = North, South, WTC7, fire-stays-put, impact-only, rigid-tree
  */
 import type { Scenario } from "./types.ts";
 
@@ -201,7 +201,7 @@ export const SCENARIOS: Scenario[] = [
     brief: "Same thing.",
     ...WTC,
     clockStart: "09:03:02",
-    nextId: "stays",
+    nextId: "wtc7",
     nistMinutes: 56,
     impactLo: 77,
     impactHi: 85,
@@ -214,6 +214,38 @@ export const SCENARIOS: Scenario[] = [
     hasAntenna: false,
     heatRate: 1.35,
     defaultSpeed: 150,
+  },
+  {
+    id: "wtc7",
+    name: "WTC 7",
+    short: "47 · fire only",
+    blurb: "No airplane. 47 stories, debris fires on the lower floors. Same Eurocode steel, same g. The floors above are sitting on the ones that are burning. Historically ~7 hours of fire, then a story mechanism — not a hinge, not a plane.",
+    brief: "No airplane. Debris fires on stories 7–9. Same steel, same gravity. The floors above are sitting on these.",
+    world: "tower",
+    shape: "tower",
+    floors: 47,
+    floorH: 3.92,
+    width: 52,
+    mass: 2.4e6,
+    viewScale: 3.2,
+    actionScale: 11,
+    defaultSpeed: 150,
+    hasPlane: false,
+    clockStart: "10:28:22",
+    group: "claim",
+    pathStep: null,
+    nextId: "stays",
+    nistMinutes: 412,
+    impactLo: 7,
+    impactHi: 9,
+    impactIntact: [1, 1, 1, 1, 1],
+    fireSpread: 1,
+    noFire: false,
+    crush: true,
+    hatTruss: false,
+    planeAngle: 0,
+    hasAntenna: false,
+    heatRate: 1,
   },
   {
     id: "stays",
