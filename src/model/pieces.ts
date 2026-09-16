@@ -657,17 +657,15 @@ export function spreadPieces(pieces: Piece[], s: Scenario, dt: number): void {
       if (b.kind === "sill" && b.layer === 0) continue;
       if (b.material === "steel") continue;
       const catchT =
-        b.material === "steel"
-          ? 420
-          : b.kind === "couch"
-            ? 280
-            : b.kind === "tree"
-              ? 140
-              : b.kind === "join"
-                ? 190
-                : a.kind === "tree" || a.kind === "couch"
-                  ? 185
-                  : 220;
+        b.kind === "couch"
+          ? 280
+          : b.kind === "tree"
+            ? 140
+            : b.kind === "join"
+              ? 190
+              : a.kind === "tree" || a.kind === "couch"
+                ? 185
+                : 220;
       if (b.temp > catchT && b.fuel > 0.08) {
         const catchBurn = b.kind === "couch" ? 0.78 : b.kind === "tree" ? 0.85 : a.kind === "tree" ? 0.4 : 0.22;
         b.burning = Math.max(b.burning, catchBurn * Math.min(1, up * Math.max(horiz, 0.35)));
@@ -988,61 +986,6 @@ export function evaluatePieces(pieces: Piece[], s: Scenario): Piece | null {
   return first;
 }
 
-function axes(p: Piece): [number, number][] {
-  const c = Math.cos(p.theta);
-  const s = Math.sin(p.theta);
-  return [
-    [c, s],
-    [-s, c],
-  ];
-}
-
-function project(p: Piece, ax: number, ay: number): { min: number; max: number } {
-  const c = Math.cos(p.theta);
-  const s = Math.sin(p.theta);
-  const hx = p.w / 2;
-  const hy = p.h / 2;
-  const corners = [
-    [p.x + c * hx - s * hy, p.y + s * hx + c * hy],
-    [p.x - c * hx - s * hy, p.y - s * hx + c * hy],
-    [p.x - c * hx + s * hy, p.y - s * hx - c * hy],
-    [p.x + c * hx + s * hy, p.y + s * hx - c * hy],
-  ];
-  let min = Infinity;
-  let max = -Infinity;
-  for (const [x, y] of corners) {
-    const d = x * ax + y * ay;
-    if (d < min) min = d;
-    if (d > max) max = d;
-  }
-  return { min, max };
-}
-
-function sat(a: Piece, b: Piece): { nx: number; ny: number; depth: number } | null {
-  const list = axes(a).concat(axes(b));
-  let minDepth = Infinity;
-  let nx = 1;
-  let ny = 0;
-  for (const [ax, ay] of list) {
-    const pa = project(a, ax, ay);
-    const pb = project(b, ax, ay);
-    const overlap = Math.min(pa.max, pb.max) - Math.max(pa.min, pb.min);
-    if (overlap <= 0) return null;
-    if (overlap < minDepth) {
-      minDepth = overlap;
-      nx = ax;
-      ny = ay;
-    }
-  }
-  const dx = b.x - a.x;
-  const dy = b.y - a.y;
-  if (dx * nx + dy * ny < 0) {
-    nx = -nx;
-    ny = -ny;
-  }
-  return { nx, ny, depth: minDepth };
-}
-
 function lowestY(p: Piece): number {
   const c = Math.cos(p.theta);
   const s = Math.sin(p.theta);
@@ -1068,27 +1011,6 @@ function capacityN(p: Piece): number {
   const em = p.material === "steel" ? eFactor(p.temp) : 1;
   const vert = p.kind === "stud" || p.kind === "column";
   return fy * em * (vert ? 16 : 6) * p.mass * G;
-}
-
-function inertia(p: Piece): number {
-  return Math.max(0.08, (p.mass * (p.w * p.w + p.h * p.h)) / 12);
-}
-
-function applyTorque(p: Piece, nx: number, ny: number, jimp: number): void {
-  // Long boards do not pick up spin from a contact — that was the flying 2×4.
-  if (
-    p.kind === "joist" ||
-    p.kind === "slab" ||
-    p.kind === "plate" ||
-    p.kind === "sill" ||
-    p.kind === "log" ||
-    p.kind === "join"
-  ) {
-    return;
-  }
-  const rx = nx * Math.max(0.04, p.w * 0.22);
-  const ry = ny * Math.max(0.04, p.h * 0.22);
-  p.omega += (rx * (ny * jimp) - ry * (nx * jimp)) / inertia(p) * 0.35;
 }
 
 /**

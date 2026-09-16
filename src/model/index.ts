@@ -8,6 +8,7 @@
  * in this folder for the accusation → file map.
  */
 export { G, STEP, FLOORS, FLOOR_H, WIDTH, HEIGHT, COLS, COL_X, TRIB, MASS, SF, ANTENNA, COL_LABELS } from "./constants.ts";
+export { girderWalk, TRIB_WTC7, COL_X_WTC7, WTC7_SEAT } from "./frame.ts";
 export { interp, fyFactor, eFactor, steelRgb, rgbCss } from "./steel.ts";
 export { woodFy, woodRgb } from "./wood.ts";
 export {

@@ -9,16 +9,18 @@
  *
  * Two worlds, one object:
  *   pieces  — bonfire / house / apartment (see pieces.ts)
- *   tower   — lumped 110-story tube (this file: stepFire, evaluateStructure, crush)
+ *   tower   — lumped tube (twins) or strut frame (WTC 7: evaluateFrame)
  *
  * Accusation map:
  *   Fire Speed speeds collapse -> step(): heat uses speed, motion does not
  *   tower is pre-leaned        -> standingLean() returns 0
  *   fire painted on floors     -> spreadFire (neighbor heat, including the floor above)
  *   NIST time is a forced hit  -> evaluateStructure: remaining capacity < load. Clock is HUD.
+ *   WTC 7 is a short twin      -> evaluateFrame: walk-off then unbraced buckle. 80/81 after 79.
  *   CGrav is decoration        -> cgOffset() / pieceCgrav
  */
-import { COLS, COL_X, G, SF, TRIB } from "./constants.ts";
+import { COLS, COL_X, G, MAX_HEAT, SF, TRIB } from "./constants.ts";
+import { COL_X_WTC7, MAX_HEAT_STRUT, TRIB_WTC7, WTC7_SEAT, WTC7_SLAB, WTC7_UNBRACED, girderWalk } from "./frame.ts";
 import {
   buildPieces,
   evaluatePieces,
@@ -144,6 +146,9 @@ export class SimEngine {
    * won't sit still" complaint.
    */
   houseCam: "room" | "outside" = "room";
+  penthouseDropped = false;
+  penthouseY = 0;
+  penthouseVy = 0;
 
   get n(): number {
     return this.scenario.world === "pieces" ? this.scenario.floors : this.floors.length;
@@ -166,6 +171,15 @@ export class SimEngine {
   }
   get isPieces(): boolean {
     return this.scenario.world === "pieces";
+  }
+  get isStrut(): boolean {
+    return this.scenario.frame === "strut";
+  }
+  colX(): number[] {
+    return this.isStrut ? COL_X_WTC7 : COL_X;
+  }
+  trib(): number[] {
+    return this.isStrut ? TRIB_WTC7 : TRIB;
   }
 
   constructor(scenario: Scenario) {
@@ -193,6 +207,12 @@ export class SimEngine {
         cols: Array.from({ length: COLS }, () => makeColumn()),
         xJitter: (hash(i + 11) - 0.5) * Math.min(4, W * 0.08),
         rotJitter: (hash(i + 91) - 0.5) * 0.12,
+        eastSeated: true,
+        eastWalk: 0,
+        eastDropped: false,
+        eastY: 0,
+        eastVy: 0,
+        windowBlown: false,
       }));
     }
     this.phase = "idle";
@@ -225,6 +245,9 @@ export class SimEngine {
     this.cgAnnounced = false;
     this.settleHold = 0;
     this.houseCam = "room";
+    this.penthouseDropped = false;
+    this.penthouseY = s.floors * s.floorH + 3.2;
+    this.penthouseVy = 0;
     this.plane = {
       alive: false,
       exploded: false,
@@ -262,7 +285,7 @@ export class SimEngine {
 
   designCap(storyIndex: number, col: number): number {
     const above = Math.max(1, this.n - storyIndex);
-    return SF * TRIB[col] * above * this.mass * G;
+    return SF * this.trib()[col] * above * this.mass * G;
   }
 
   reset(scenario?: Scenario): void {
@@ -316,10 +339,11 @@ export class SimEngine {
 
   /**
    * Fire Speed. Heating time-scale only.
-   * Clamp 1..240 so a slider cannot zero the step or run a 1000x "video."
+   * Clamp 1..240 on wood/tube so a slider cannot run a 1000× video.
+   * WTC 7 burned for 7 hours — that ceiling is 2400×.
    */
   setSpeed(v: number): void {
-    this.speed = clamp(v, 1, 240);
+    this.speed = clamp(v, 1, this.isStrut ? MAX_HEAT_STRUT : MAX_HEAT);
   }
 
   /**
@@ -369,10 +393,12 @@ export class SimEngine {
               this.t += chunk;
               remain -= chunk;
             }
+            if (this.isStrut) this.stepFrameMotion(d);
             break;
           }
           case "collapse":
             this.stepCollapse(d);
+            if (this.isStrut) this.stepFrameMotion(d);
             this.integrateDebris(d);
             this.t += d;
             break;
@@ -835,12 +861,16 @@ export class SimEngine {
           f.cols[c].stripped = 0;
         } else if (sever) {
           f.cols[c].stripped = clamp(1.05 - s.impactIntact[c], 0, 1) * Math.max(edge, 0.4);
+        } else if (this.isStrut) {
+          // Office fire. Insulation mostly still on. Only the east line starts lit.
+          f.cols[c].stripped = c <= 1 ? 0.5 : 0.12;
         } else if (this.n <= 8) {
           f.cols[c].stripped = 0.9;
         } else {
           f.cols[c].stripped = (c <= 2 ? 0.92 : 0.4) * Math.max(edge, 0.5);
         }
-        if (!s.noFire && (sever ? c <= 2 : this.n <= 8 || c <= 3)) {
+        const seedCol = sever ? c <= 2 : this.isStrut ? c <= 1 : this.n <= 8 || c <= 3;
+        if (!s.noFire && seedCol) {
           // Jet fuel lights the lowest impact story hard. The rest of the
           // gash is stripped and waiting — fire has to walk up, one floor
           // at a time, over the hour. "Fire stays put" lights the whole belt.
@@ -848,7 +878,11 @@ export class SimEngine {
           if (seedNow) {
             f.cols[c].burning = sever
               ? 0.52 + 0.2 * (1 - s.impactIntact[c])
-              : this.n <= 8
+              : this.isStrut
+                ? c === 0
+                  ? 0.58
+                  : 0.45
+                : this.n <= 8
                 ? 0.78
                 : 0.7 * (c === 0 ? 1 : 0.72);
             f.cols[c].fuel = 1;
@@ -885,7 +919,7 @@ export class SimEngine {
       0,
       sever
         ? `Impact floors ${s.impactLo}–${s.impactHi}. Columns cut on the inbound face and into the core. Fire starts on story ${s.impactLo}.${s.nistMinutes > 0 ? ` NIST stand time ${s.nistMinutes} min.` : ""}`
-        : `Ignition on stories ${s.impactLo}–${s.impactHi}. No airplane. Insulation stripped on the fire face.${s.nistMinutes > 0 ? ` NIST stand time ${s.nistMinutes} min.` : ""}`,
+        : `Ignition on stories ${s.impactLo}–${s.impactHi}. No airplane. Floor beams will expand toward the seat at column 79.${s.nistMinutes > 0 ? ` NIST stand time ${s.nistMinutes} min.` : ""}`,
       "critical",
     );
     this.camTX = this.width * 0.28;
@@ -908,11 +942,19 @@ export class SimEngine {
       for (let c = 0; c < COLS; c++) {
         const col = f.cols[c];
         if (col.failed) continue;
-        const gas = 20 + 900 * col.burning;
-        const tau = (col.stripped > 0.45 ? 6700 : 16000) / heatMul;
+        const gas = this.isStrut ? 20 + 780 * col.burning : 20 + 900 * col.burning;
+        const tau = (
+          this.isStrut
+            ? col.stripped > 0.4
+              ? 13000
+              : 20000
+            : col.stripped > 0.45
+              ? 6700
+              : 16000
+        ) / heatMul;
         col.temp += ((gas - col.temp) / tau) * dt;
         if (col.burning > 0 && col.fuel > 0) {
-          col.fuel = Math.max(0, col.fuel - 0.00012 * col.burning * dt);
+          col.fuel = Math.max(0, col.fuel - (this.isStrut ? 0.00002 : 0.00012) * col.burning * dt);
           if (col.fuel < 0.08) col.burning *= Math.exp(-dt / 900);
         } else if (col.burning > 0 && col.fuel <= 0) {
           col.burning *= Math.exp(-dt / 400);
@@ -963,8 +1005,10 @@ export class SimEngine {
       y,
       `Fire on story ${next}`,
       next <= s.impactHi
-        ? `Story ${next} caught from the one below. Jet fuel opened the belt; the hour is the fire walking it.`
-        : "One floor at a time. Elevator shafts are chimneys. The hour is the fire walking up.",
+        ? `Story ${next} caught from the one below.`
+        : this.isStrut
+          ? "Heat rising through the east bay. The hour is the fire walking up."
+          : "One floor at a time. Elevator shafts are chimneys. The hour is the fire walking up.",
       "fire",
       7,
     );
@@ -995,11 +1039,12 @@ export class SimEngine {
       for (let c = 0; c < COLS; c++) {
         if (!alight[i][c]) continue;
         const col = f.cols[c];
+        const k = this.isStrut ? 0.12 : 1;
         const horiz = spread > 0 ? spread : 1;
-        if (c + 1 < COLS) {
+        if (c + 1 < COLS && !(this.isStrut && c + 1 === 4)) {
           const nbr = f.cols[c + 1];
           const leak = c < 2 ? 1 : horiz;
-          nbr.temp += 0.09 * col.burning * leak * dt;
+          nbr.temp += 0.09 * col.burning * leak * k * dt;
           if (nbr.temp > 180 && nbr.fuel > 0.1) {
             nbr.burning = Math.max(nbr.burning, 0.22 * Math.max(leak, 0.4));
             nbr.stripped = Math.max(nbr.stripped, 0.3);
@@ -1007,7 +1052,7 @@ export class SimEngine {
         }
         if (c > 0) {
           const nbr = f.cols[c - 1];
-          nbr.temp += 0.06 * col.burning * dt;
+          nbr.temp += 0.06 * col.burning * k * dt;
           if (nbr.temp > 210 && nbr.fuel > 0.1) {
             nbr.burning = Math.max(nbr.burning, 0.18);
             nbr.stripped = Math.max(nbr.stripped, 0.24);
@@ -1016,7 +1061,7 @@ export class SimEngine {
         const dn = this.floors[i - 1];
         if (dn) {
           const nbr = dn.cols[c];
-          nbr.temp += 0.025 * col.burning * (c === 2 ? 0.8 : 0.35) * dt;
+          nbr.temp += 0.025 * col.burning * (c === 2 ? 0.8 : 0.35) * k * dt;
           if (nbr.temp > 320 && nbr.fuel > 0.1) {
             nbr.burning = Math.max(nbr.burning, 0.12);
             nbr.stripped = Math.max(nbr.stripped, 0.18);
@@ -1025,11 +1070,18 @@ export class SimEngine {
         if (spread > 0) {
           const up = this.floors[i + 1];
           if (up && up.state === "stacked") {
+            if (this.isStrut && c >= 4) {
+              continue;
+            }
             const nbr = up.cols[c];
-            nbr.temp += 0.45 * col.burning * dt;
-            if (nbr.temp > 220 && nbr.fuel > 0.1) {
-              nbr.burning = Math.max(nbr.burning, 0.28);
-              nbr.stripped = Math.max(nbr.stripped, 0.3);
+            if (this.isStrut && nbr.burning > 0.2) {
+              // Already a fire floor. Do not double-cook with the plume.
+            } else {
+              nbr.temp += (this.isStrut ? 0.08 : 0.45) * col.burning * dt;
+              if (nbr.temp > 220 && nbr.fuel > 0.1) {
+                nbr.burning = Math.max(nbr.burning, this.isStrut ? 0.55 : 0.28);
+                nbr.stripped = Math.max(nbr.stripped, this.isStrut ? 0.48 : 0.3);
+              }
             }
           }
         }
@@ -1070,6 +1122,10 @@ export class SimEngine {
   private evaluateStructure(): void {
     const s = this.scenario;
     if (this.floors.length < 2) return;
+    if (this.isStrut) {
+      this.evaluateFrame();
+      return;
+    }
 
     for (let i = 0; i < this.floors.length - 1; i++) {
       const f = this.floors[i];
@@ -1129,7 +1185,187 @@ export class SimEngine {
     const bow = 1 / (1 + 4 * col.bow * col.bow);
     const axial = fy * col.intact * this.designCap(floorIndex, c);
     const buckle = em * bow * col.intact * this.designCap(floorIndex, c);
-    return Math.min(axial, buckle);
+    let cap = Math.min(axial, buckle);
+    if (this.isStrut && c <= 2) {
+      const k = this.unbracedCount();
+      cap *= 1 / (1 + Math.max(0, k - 1) ** 2);
+    }
+    return cap;
+  }
+
+  /**
+   * WTC 7. Floors brace the struts. Kill the floors, the struts are on their own.
+   *
+   * CRITIC: "You pancaked it like a twin."
+   * Walk-off is αLΔT vs the seat, at ~400 °C — below yield collapse.
+   * 79 buckles from unbraced length. 80 and 81 follow because they
+   * only shared load through those floors. The shell is last.
+   */
+  private evaluateFrame(): void {
+    const slab = WTC7_SLAB - 1;
+    const hi = Math.min(this.floors.length - 2, 15);
+
+    for (let i = slab + 1; i <= hi; i++) {
+      const f = this.floors[i];
+      if (!f || f.state !== "stacked" || f.eastDropped) continue;
+      // NIST: the girder that walked was in the east floor system around 13,
+      // not every burning office. Lower stories heat; they do not unseat 79.
+      if (f.story < 11 || f.story > 14) continue;
+      f.eastWalk = girderWalk(f.cols[0].temp);
+      if (f.eastSeated && f.eastWalk > WTC7_SEAT) {
+        f.eastSeated = false;
+        f.eastDropped = true;
+        this.blowWindows(i);
+        const min = this.t / 60;
+        const y = (i + 1) * this.floorH;
+        this.pushBubble(
+          this.width * 0.28,
+          y,
+          "Walk-off",
+          `Story ${i + 1}: beams expanded ${f.eastWalk.toFixed(2)} m. The girder left the seat at column 79.`,
+          "fire",
+          7,
+        );
+        this.log(min, `Girder walk-off at column 79, story ${i + 1}. Expansion ${f.eastWalk.toFixed(2)} m, seat ${WTC7_SEAT} m.`, "fire");
+        this.camTX = this.width * 0.28;
+        this.camTY = y;
+        return;
+      }
+    }
+
+    for (let i = hi; i > slab + 1; i--) {
+      const above = this.floors[i];
+      const here = this.floors[i - 1];
+      if (!above || !here) continue;
+      if (above.eastDropped && !here.eastDropped && here.state === "stacked") {
+        here.eastDropped = true;
+        here.eastSeated = false;
+        this.blowWindows(i - 1);
+        this.log(
+          this.t / 60,
+          `East floor ${i + 1} came down on story ${i}. Column 79 lost a brace.`,
+          "info",
+        );
+        return;
+      }
+    }
+
+    const unbraced = this.unbracedCount();
+    if (unbraced >= WTC7_UNBRACED && !this.lineFailed(0)) {
+      this.failLine(0);
+      const min = this.t / 60;
+      const y = 13 * this.floorH;
+      this.pushBubble(
+        this.width * 0.26,
+        y,
+        "Column 79",
+        `${unbraced} stories without a floor. The strut buckled. Euler, not melt.`,
+        "critical",
+        8,
+      );
+      this.log(min, `Column 79 buckled after ${unbraced} stories of missing brace.`, "critical");
+      this.camTX = this.width * 0.26;
+      this.camTY = y;
+      return;
+    }
+    if (this.lineFailed(0) && !this.lineFailed(1)) {
+      this.failLine(1);
+      this.log(this.t / 60, "Column 80 buckled. Same missing floors, plus 79's load.", "critical");
+      return;
+    }
+    if (this.lineFailed(1) && !this.lineFailed(2)) {
+      this.failLine(2);
+      this.penthouseDropped = true;
+      const y = this.height;
+      this.pushBubble(
+        this.width * 0.3,
+        y,
+        "Penthouse",
+        "East penthouse is sitting on 79–81. The shell is still a building.",
+        "critical",
+        8,
+      );
+      this.log(this.t / 60, "Column 81 buckled. East penthouse is coming down.", "critical");
+      this.camTY = y;
+      return;
+    }
+    if (this.lineFailed(2) && !this.lineFailed(3)) {
+      this.failLine(3);
+      for (let i = 32; i <= 43; i++) this.blowWindows(i);
+      this.pushBubble(
+        this.width * 0.5,
+        38 * this.floorH,
+        "Windows",
+        "North-face glass. The interior is unzipping east to west.",
+        "fire",
+        7,
+      );
+      this.log(this.t / 60, "West interior buckled. Windows blowing on the north face.", "critical");
+      return;
+    }
+    if (this.lineFailed(3) && this.phase === "fire") {
+      this.failLine(4);
+      this.initiate(slab, 0);
+    }
+  }
+
+  private unbracedCount(): number {
+    const slab = WTC7_SLAB - 1;
+    let n = 0;
+    for (let i = slab; i < 14 && i < this.floors.length; i++) {
+      if (this.floors[i].eastDropped) n += 1;
+    }
+    return n;
+  }
+
+  private lineFailed(c: number): boolean {
+    const f = this.floors[12] ?? this.floors[Math.min(6, this.floors.length - 1)];
+    return Boolean(f?.cols[c]?.failed);
+  }
+
+  private failLine(c: number): void {
+    const xs = this.colX();
+    for (let i = WTC7_SLAB - 1; i < this.floors.length; i++) {
+      const col = this.floors[i].cols[c];
+      col.failed = true;
+      col.intact = 0;
+      col.bow = 1;
+      col.burning = 0;
+    }
+    this.spawn("dust", xs[c] * this.width, 13 * this.floorH, 18, 40);
+    this.spawn("spark", xs[c] * this.width, 12 * this.floorH, 12, 28);
+  }
+
+  private blowWindows(storyIndex: number): void {
+    const f = this.floors[storyIndex];
+    if (!f || f.windowBlown) return;
+    f.windowBlown = true;
+    const y = (storyIndex + 1) * this.floorH;
+    for (let k = 0; k < 10; k++) {
+      this.spawn("spark", this.width * (0.15 + hash(k + storyIndex) * 0.7), y + hash(k) * this.floorH, 8, 18, this.width * 0.45);
+    }
+  }
+
+  private stepFrameMotion(dt: number): void {
+    const rubble = 0.4;
+    for (const f of this.floors) {
+      if (!f.eastDropped) continue;
+      f.eastVy -= G * dt;
+      f.eastY += f.eastVy * dt;
+      const minY = rubble - (f.story - 1) * this.floorH;
+      if (f.eastY < minY) {
+        f.eastY = minY;
+        f.eastVy = 0;
+      }
+    }
+    if (this.penthouseDropped) {
+      this.penthouseVy -= G * dt;
+      this.penthouseY += this.penthouseVy * dt;
+      if (this.penthouseY < 4) {
+        this.penthouseY = 4;
+        this.penthouseVy = 0;
+      }
+    }
   }
 
   /**
@@ -1154,11 +1390,22 @@ export class SimEngine {
     this.hitstop = this.reducedMotion ? 0 : 0.12;
 
     const n = this.floors.length;
-    const lo = Math.min(floorIndex + 1, n - 1);
+    let lo: number;
     let mass = 0;
-    for (let i = lo; i < n; i++) {
-      this.floors[i].state = "block";
-      mass += this.floors[i].mass;
+    if (this.isStrut) {
+      // The interior is already dead. The shell comes down as one piece,
+      // plaza to roof — not a 5-story nibble and a snap-to-pile.
+      lo = 0;
+      for (let i = 0; i < n; i++) {
+        this.floors[i].state = "block";
+        mass += this.floors[i].mass;
+      }
+    } else {
+      lo = Math.min(floorIndex + 1, n - 1);
+      for (let i = lo; i < n; i++) {
+        this.floors[i].state = "block";
+        mass += this.floors[i].mass;
+      }
     }
     if (mass < 1) mass = this.floors[Math.max(0, n - 1)].mass;
     const h = Math.max(this.floorH, (n - lo) * this.floorH);
@@ -1180,21 +1427,23 @@ export class SimEngine {
       lo,
       hi: n - 1,
       x: this.width / 2 + Math.sin(lean) * this.floorH * 2,
-      bottomY: lo * this.floorH,
+      bottomY: this.isStrut ? 0 : lo * this.floorH,
       theta: lean,
       vx: s.crush ? lean * 2.4 : lean * this.width * 0.06,
-      vy: 0.4,
+      vy: this.isStrut ? 1.2 : 0.4,
       omega: s.crush ? lean * 0.05 : lean * 0.15,
       mass,
       I,
       hinged: !s.crush,
       hingeX,
-      hingeY: lo * this.floorH,
+      hingeY: this.isStrut ? 0 : lo * this.floorH,
     };
-    this.crushLo = floorIndex;
+    this.crushLo = this.isStrut ? -1 : floorIndex;
     const blockH = (n - lo) * this.floorH;
     this.camTX = this.width / 2;
-    this.camTY = Math.max(this.floorH * 2, lo * this.floorH - this.floorH * 2.2);
+    this.camTY = this.isStrut
+      ? this.height * 0.42
+      : Math.max(this.floorH * 2, lo * this.floorH - this.floorH * 2.2);
     this.camTS = n <= 12 ? s.actionScale : clamp(380 / Math.max(blockH + lo * this.floorH * 0.25, 8), 0.8, s.actionScale);
 
     const min = this.t / 60;
@@ -1203,7 +1452,9 @@ export class SimEngine {
       lo * this.floorH + this.floorH,
       "Initiation",
       s.crush
-        ? "Story mechanism. The upper block is attached — it drops with the floor that failed."
+        ? this.isStrut
+          ? "The interior is gone. The shell cannot carry 47 stories. Footprint collapse."
+          : "Story mechanism. The upper block is attached — it drops with the floor that failed."
         : "Hinge forms. Crush is disabled — this is the cartoon chimney.",
       "critical",
       7,
@@ -1265,12 +1516,27 @@ export class SimEngine {
 
     let guard = 0;
     while (this.crushLo >= 0 && b.bottomY <= (this.crushLo + 1) * this.floorH + 0.05 && guard < this.floors.length) {
+      const keNow = 0.5 * b.mass * b.vy * b.vy;
+      const idx = this.crushLo;
+      let cap = 0;
+      const f = this.floors[idx];
+      if (f) {
+        for (let c = 0; c < COLS; c++) cap += this.colCapacity(idx, c);
+      }
+      const eFail = Math.max(cap, 0.15 * this.designCap(Math.max(0, idx), 2)) * this.floorH * 0.22;
+      // Do not eat a story the block has only kissed. First contact at vy = 0.4
+      // used to zero the drop and skip the crush.
+      if (keNow < eFail * 0.35 && b.vy < 6) break;
       this.eatFloor(b);
       guard += 1;
     }
 
     const blockH = Math.max(this.floorH, (b.hi - b.lo + 1) * this.floorH);
-    if (this.floors.length <= 12) {
+    if (this.isStrut) {
+      this.camTX = this.width / 2;
+      this.camTY = Math.max(this.floorH * 6, b.bottomY + blockH * 0.38);
+      this.camTS = clamp(420 / Math.max(this.height * 0.5, 8), 0.7, this.scenario.actionScale);
+    } else if (this.floors.length <= 12) {
       this.camTX = this.width / 2;
       this.camTY = Math.max(this.floorH, b.bottomY - this.floorH * 2);
       this.camTS = this.scenario.actionScale * 0.85;
@@ -1281,7 +1547,11 @@ export class SimEngine {
       this.camTS = clamp(400 / span, 0.85, this.scenario.actionScale);
     }
 
-    if (this.crushLo < 0 && b.bottomY <= Math.max(0.8, this.floorH * 0.4)) this.settle("pancake");
+    if (this.isStrut) {
+      if (b.bottomY <= -this.height * 0.78) this.settle("pancake");
+    } else if (this.crushLo < 0 && b.bottomY <= Math.max(0.8, this.floorH * 0.4)) {
+      this.settle("pancake");
+    }
 
     if (this.particles.length < PARTICLE_CAP - 20) {
       for (let i = 0; i < 3; i++) {
@@ -1483,7 +1753,7 @@ export class SimEngine {
     if (s.noFire && this.stoodAnnounced && min > 24 && this.phase === "fire") {
       this.settlePieces();
     }
-    if (!this.spreadAnnounced && farFire > 0 && s.fireSpread > 0) {
+    if (!this.spreadAnnounced && farFire > 0 && s.fireSpread > 0 && !this.isStrut) {
       this.spreadAnnounced = true;
       this.pushBubble(
         COL_X[4] * this.width,
@@ -1707,11 +1977,12 @@ export class SimEngine {
     if (this.floors.length === 0) return null;
     const s = this.scenario;
     const mid = clamp(Math.floor((s.impactLo + s.impactHi) / 2) - 1, 0, this.floors.length - 1);
-    const col = this.floors[mid].cols[0];
-    const cap = this.colCapacity(mid, 0);
-    const des = this.designCap(mid, 0);
+    const col = this.isStrut ? this.floors[Math.min(12, this.floors.length - 1)].cols[0] : this.floors[mid].cols[0];
+    const idx = this.isStrut ? Math.min(12, this.floors.length - 1) : mid;
+    const cap = this.colCapacity(idx, 0);
+    const des = this.designCap(idx, 0);
     return {
-      label: `impact-face story ${mid + 1}`,
+      label: this.isStrut ? `column 79 story ${idx + 1}` : `impact-face story ${mid + 1}`,
       temp: col.temp,
       fy: fyFactor(col.temp) * col.intact,
       ratio: des > 0 ? cap / des : 1,
@@ -1725,12 +1996,19 @@ export class SimEngine {
     const theta = this.tilt();
     const cg = this.cgOffset();
     const half = this.width / 2;
-    const faces = {
-      impact: this.face([0]),
-      sides: this.face([1, 3]),
-      core: this.face([2]),
-      opposite: this.face([4]),
-    };
+    const faces = this.isStrut
+      ? {
+          impact: this.face([0]),
+          sides: this.face([1, 2]),
+          core: this.face([3]),
+          opposite: this.face([4]),
+        }
+      : {
+          impact: this.face([0]),
+          sides: this.face([1, 3]),
+          core: this.face([2]),
+          opposite: this.face([4]),
+        };
     let load = 0;
     let left = 0;
     let core = 0;
@@ -1741,12 +2019,21 @@ export class SimEngine {
     if (!this.isPieces && this.floors.length > 0) {
       const mid = clamp(Math.floor((s.impactLo + s.impactHi) / 2) - 1, 0, this.floors.length - 1);
       load = (this.floors.length - mid) * this.mass * G;
-      left = this.colCapacity(mid, 0) + this.colCapacity(mid, 1);
-      core = this.colCapacity(mid, 2);
-      right = this.colCapacity(mid, 3) + this.colCapacity(mid, 4);
-      leftDes = this.designCap(mid, 0) + this.designCap(mid, 1);
-      coreDes = this.designCap(mid, 2);
-      rightDes = this.designCap(mid, 3) + this.designCap(mid, 4);
+      if (this.isStrut) {
+        left = this.colCapacity(mid, 0);
+        core = this.colCapacity(mid, 1) + this.colCapacity(mid, 2);
+        right = this.colCapacity(mid, 4);
+        leftDes = this.designCap(mid, 0);
+        coreDes = this.designCap(mid, 1) + this.designCap(mid, 2);
+        rightDes = this.designCap(mid, 4);
+      } else {
+        left = this.colCapacity(mid, 0) + this.colCapacity(mid, 1);
+        core = this.colCapacity(mid, 2);
+        right = this.colCapacity(mid, 3) + this.colCapacity(mid, 4);
+        leftDes = this.designCap(mid, 0) + this.designCap(mid, 1);
+        coreDes = this.designCap(mid, 2);
+        rightDes = this.designCap(mid, 3) + this.designCap(mid, 4);
+      }
     } else {
       left = faces.impact.cap;
       core = faces.core.cap;
@@ -1771,7 +2058,13 @@ export class SimEngine {
           ? "The fire side is the soft side. CGrav has shifted — still well inside the base."
           : this.isPieces
             ? "Heating members. Strength is a function of temperature. Nothing is painted on."
-            : "Heating. The roof belt is carrying the wound.";
+            : this.isStrut
+              ? this.penthouseDropped
+                ? "East penthouse is down. Interior unzipping. The shell is still a building."
+                : this.unbracedCount() > 0
+                  ? "East floors gone. Column 79 is losing braces. Expansion, not melt."
+                  : "Heating. Floor beams expand toward the seat at column 79."
+              : "Heating. The roof belt is carrying the wound.";
     } else if (this.phase === "collapse" && this.block?.hinged) {
       verdict = "Rigid tree: the upper block is rotating off a hinge because crush is forbidden.";
     } else if (this.phase === "collapse") {
@@ -1829,6 +2122,7 @@ export class SimEngine {
       hatTruss: s.hatTruss,
       pieceCount: this.pieces.length,
       looseCount: loose,
+      frame: s.frame ?? "tube",
     };
   }
 }

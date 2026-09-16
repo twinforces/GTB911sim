@@ -4,7 +4,7 @@ A [GrumpyTechBro](https://x.com/GrumpyTechBro) Joint.
 
 Interactive 3D physics, not a video. A teaching path:
 
-**Boy Scout bonfire → 1-story house → 2-story house → apartment → North/South Tower.**
+**Boy Scout bonfire → 1-story house → 2-story house → apartment → North/South Tower → WTC 7.**
 
 Gravity is 9.81 m/s². Steel follows Eurocode 3 reduction factors. Wood chars. Fire spreads by **neighbor heat**: a burning member warms what is within a couple of metres; when that neighbor crosses ignition temperature, it lights. No whole-wall cheat.
 
@@ -27,7 +27,8 @@ Tests that prove those three claims live next to the code:
 - `src/model/constants.test.ts` — `G === 9.81`
 - `src/model/steel.test.ts` — Eurocode 3 knots, including 600 °C → 0.47
 - `src/model/pieces.test.ts` — tree-only ignition, couch gate, drop-only unlock, gravity
-- `src/model/engine.test.ts` — Fire Speed heats; it does not add gravity
+- `src/model/engine.test.ts` — Fire Speed heats; it does not add gravity. WTC 7 walks off ~400 °C, then 79/80/81, then the shell. No-fire idle does not initiate.
+- `src/model/frame.test.ts` — αLΔT vs the seat at column 79.
 - `src/viewmodel/LabViewModel.test.ts` — play / pause / speed / which-run
 
 ## How to run

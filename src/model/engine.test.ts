@@ -41,7 +41,7 @@ describe("SimEngine play/pause/speed", () => {
     assert.equal(hottest(e.pieces)!.temp, temp0);
   });
 
-  it("setSpeed clamps to 1..240", () => {
+  it("setSpeed clamps to 1..240 on wood, 1..2400 on WTC 7", () => {
     const e = new SimEngine(scenarioById("house1"));
     e.setSpeed(0);
     assert.equal(e.speed, 1);
@@ -49,6 +49,11 @@ describe("SimEngine play/pause/speed", () => {
     assert.equal(e.speed, 240);
     e.setSpeed(24);
     assert.equal(e.speed, 24);
+    const seven = new SimEngine(scenarioById("wtc7"));
+    seven.setSpeed(800);
+    assert.equal(seven.speed, 800);
+    seven.setSpeed(4000);
+    assert.equal(seven.speed, 2400);
   });
 });
 
@@ -272,11 +277,15 @@ describe("tower fire is not a NIST keyframe", () => {
 });
 
 describe("WTC 7", () => {
+  const wound = (e: SimEngine) =>
+    (e as unknown as { seedWound: (sever: boolean) => void }).seedWound(false);
+
   it("ignites with no plane and uncut columns", () => {
     const e = new SimEngine(scenarioById("wtc7"));
     e.play();
     assert.equal(e.phase, "fire");
     assert.equal(e.plane.alive, false);
+    assert.equal(e.scenario.frame, "strut");
     const fireFloor = e.floors[6];
     assert.ok(fireFloor.cols.some((c) => c.burning > 0.2), "stories 7–9 start on fire");
     assert.ok(
@@ -285,22 +294,97 @@ describe("WTC 7", () => {
     );
     const high = e.floors[20];
     assert.ok(high.cols.every((c) => c.burning < 0.05), "story 21 is not pre-lit");
+    assert.ok(e.floors[12].eastSeated, "girder starts on the seat");
   });
 
-  it("drops when the fire floor loses yield, with no plane cut", () => {
+  it("walks the girder off the seat at ~400 °C — expansion, not yield", () => {
     const e = new SimEngine(scenarioById("wtc7"));
     e.play();
-    const f = e.floors[6];
-    for (const c of f.cols) {
-      c.temp = 740;
-      c.burning = 1;
-      c.stripped = 1;
-      c.sag = 0.75;
-      c.bow = 0.65;
+    wound(e);
+    const f = e.floors[12];
+    f.cols[0].temp = 420;
+    f.cols[0].burning = 0.8;
+    e.setSpeed(1);
+    for (let i = 0; i < 4; i++) e.step(1 / 60);
+    assert.equal(f.eastSeated, false, "seat lost");
+    assert.equal(f.eastDropped, true);
+    assert.equal(e.phase, "fire", "the shell is still a building");
+    assert.equal(e.floors[12].cols[4].failed, false, "perimeter has not failed");
+    assert.ok(e.events.some((ev) => /walk-off/i.test(ev.text)));
+  });
+
+  it("does not walk off cold", () => {
+    const e = new SimEngine(scenarioById("wtc7"));
+    e.play();
+    const f = e.floors[12];
+    f.cols[0].temp = 180;
+    e.setSpeed(1);
+    for (let i = 0; i < 4; i++) e.step(1 / 60);
+    assert.equal(f.eastSeated, true);
+    assert.equal(f.eastDropped, false);
+  });
+
+  it("buckles column 79 from missing braces, then 80, then 81 — not the same frame", () => {
+    const e = new SimEngine(scenarioById("wtc7"));
+    e.play();
+    wound(e);
+    for (let i = 5; i <= 12; i++) {
+      e.floors[i].eastDropped = true;
+      e.floors[i].eastSeated = false;
     }
     e.setSpeed(1);
-    for (let i = 0; i < 12; i++) e.step(1 / 60);
-    assert.equal(e.phase, "collapse", "intact columns still fail when yield is gone");
-    assert.ok(e.block && !e.block.hinged, "crush is on — not a cartoon tip");
+    e.step(1 / 60);
+    assert.equal(e.floors[12].cols[0].failed, true, "79 goes first");
+    assert.equal(e.floors[12].cols[1].failed, false, "80 is still up this step");
+    assert.equal(e.phase, "fire");
+    e.step(1 / 60);
+    assert.equal(e.floors[12].cols[1].failed, true, "80 follows");
+    assert.equal(e.floors[12].cols[2].failed, false);
+    e.step(1 / 60);
+    assert.equal(e.floors[12].cols[2].failed, true, "81 last of the east line");
+    assert.equal(e.penthouseDropped, true);
+    assert.equal(e.phase, "fire", "shell still standing");
+    assert.equal(e.floors[12].cols[4].failed, false);
+  });
+
+  it("shell comes down only after the interior is gone", () => {
+    const e = new SimEngine(scenarioById("wtc7"));
+    e.play();
+    wound(e);
+    for (let i = 5; i <= 12; i++) {
+      e.floors[i].eastDropped = true;
+      e.floors[i].eastSeated = false;
+    }
+    e.setSpeed(1);
+    for (let i = 0; i < 8; i++) e.step(1 / 60);
+    assert.equal(e.phase, "collapse");
+    assert.ok(e.block && !e.block.hinged);
+    assert.ok(e.events.some((ev) => /penthouse|81/i.test(ev.text)));
+  });
+
+  it("does not walk off in the first hour — this is a 7-hour office fire", () => {
+    const e = new SimEngine(scenarioById("wtc7"));
+    e.play();
+    e.setSpeed(2400);
+    for (let i = 0; i < 90; i++) e.step(1 / 60);
+    assert.ok(e.t / 60 > 50, "sim minutes actually advanced");
+    assert.equal(e.phase, "fire");
+    assert.ok(
+      e.floors.every((f) => f.eastSeated),
+      `no walk-off at ${(e.t / 60).toFixed(0)} min`,
+    );
+  });
+
+  it("comes down after hours of fire, not the first hour", () => {
+    const e = new SimEngine(scenarioById("wtc7"));
+    e.play();
+    e.setSpeed(2400);
+    for (let i = 0; i < 1600 && e.phase !== "settled"; i++) e.step(1 / 60);
+    assert.equal(e.phase, "settled");
+    assert.ok(e.initiationT !== null);
+    const min = e.initiationT! / 60;
+    assert.ok(min > 180, `too fast: ${min.toFixed(0)} min`);
+    assert.ok(min < 700, `too slow: ${min.toFixed(0)} min`);
+    assert.ok(e.penthouseDropped, "east penthouse dropped before the shell");
   });
 });

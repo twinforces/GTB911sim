@@ -54,6 +54,15 @@ export interface Floor {
   cols: Column[];
   xJitter: number;
   rotJitter: number;
+  /** Girder still on the seat at column 79. Twins ignore this. */
+  eastSeated: boolean;
+  /** Thermal walk of the east girder, metres. */
+  eastWalk: number;
+  /** East bay floor has dropped — no longer a brace for 79. */
+  eastDropped: boolean;
+  eastY: number;
+  eastVy: number;
+  windowBlown: boolean;
 }
 
 /**
@@ -231,6 +240,7 @@ export interface SimSnapshot {
   hatTruss: boolean;
   pieceCount: number;
   looseCount: number;
+  frame: "tube" | "strut";
 }
 
 export interface Scenario {
@@ -265,4 +275,9 @@ export interface Scenario {
   planeAngle: number;
   hasAntenna: boolean;
   heatRate: number;
+  /**
+   * tube = twins (perimeter + core as a shaft).
+   * strut = WTC 7 (interior columns braced only by floors).
+   */
+  frame?: "tube" | "strut";
 }

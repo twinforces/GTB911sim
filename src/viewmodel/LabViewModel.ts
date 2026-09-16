@@ -100,8 +100,9 @@ export class LabViewModel {
       next,
       latest,
       igniteLabel: scenario.hasPlane ? "Impact" : "Ignite",
-      fireSpeedCaption:
-        "Heating time-scale only. Gravity and collapse always run at 1×. 8× means fire walks eight times faster than the clock.",
+      fireSpeedCaption: this.engine.isStrut
+        ? "Heating time-scale only. Gravity and collapse always run at 1×. WTC 7 burned ~7 hours — 800× is about 30 seconds of watching."
+        : "Heating time-scale only. Gravity and collapse always run at 1×. 8× means fire walks eight times faster than the clock.",
       gravityCaption: "9.81 m/s². Not a slider. Fire Speed does not touch this.",
     };
   }
@@ -159,7 +160,7 @@ export class LabViewModel {
   }
 
   /**
-   * What: Fire Speed slider, 1–240.
+   * What: Fire Speed slider. 1–240 on wood/tube, 1–2400 on WTC 7.
    * Why the name is not “sim speed”: it must not be mistaken for a gravity
    * multiplier. The clamp lives in the Model (`SimEngine.setSpeed`).
    */

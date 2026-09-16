@@ -8,6 +8,7 @@ node_modules/.nitro/
 
 # Local / sandbox
 .grok/
+.project_id
 *.log
 .env
 .env.*

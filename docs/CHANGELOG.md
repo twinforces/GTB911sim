@@ -2,6 +2,12 @@
 
 Long-term history. What / Why / How. Git hashes filled in after commits.
 
+## 2026-09-16 — WTC 7 is a frame, not a short twin
+
+- **What:** Column 79, seated girder, walk-off from thermal expansion, then Euler buckle of an unbraced strut. 80 and 81 follow because they only share load through the floors. Shell last. Top pane is Col 79. Fire Speed to 2400×. The shell comes down as one piece after the interior is gone.
+- **Why:** Painting 7 as a 47-story tube hid the actual failure. Windows blow when the interior unzips, not as a cutscene. A 5-story nibble then a snap-to-pile was not the collapse.
+- **How:** `frame.ts` + `evaluateFrame`. `frame: "strut"` on the WTC 7 run. Office-fire tau. `initiate` for strut drops the whole shaft into the footprint.
+
 ## 2026-09-08 — WTC 7, no NIST keyframe
 
 - **What:** WTC 7 is a claim run: 47 stories, debris fires on 7–9, no airplane, columns uncut. Impact-only no longer drops if you leave it idle. Tower fire walks because the floor above is hot. Collapse is capacity < load.

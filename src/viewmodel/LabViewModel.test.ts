@@ -74,6 +74,11 @@ describe("commands", () => {
     assert.equal(vm.speed, 1);
     vm.setSpeed(1000);
     assert.equal(vm.speed, 240);
+    const wtc7 = new LabViewModel("wtc7");
+    wtc7.setSpeed(1000);
+    assert.equal(wtc7.speed, 1000);
+    wtc7.setSpeed(4000);
+    assert.equal(wtc7.speed, 2400);
     assert.match(vm.getState().fireSpeedCaption, /Gravity and collapse always run at 1×/);
     assert.match(vm.getState().gravityCaption, /9\.81/);
   });

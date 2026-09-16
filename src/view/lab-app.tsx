@@ -204,6 +204,7 @@ export function LabApp() {
             snap={snap}
             wood={view?.wood ?? false}
             speed={speed}
+            heatMax={scenario.frame === "strut" ? 2400 : 240}
             onPlay={togglePlay}
             onReset={reset}
             onSpeed={changeSpeed}
@@ -249,7 +250,9 @@ function BriefingOverlay({ scenario, onIgnite }: { scenario: Scenario; onIgnite:
         <p className="mt-2 text-sm leading-relaxed md:text-base">{scenario.brief}</p>
         <p className="mt-2 text-sm text-muted">
           {scenario.shape === "tower"
-            ? "Fire walks one story at a time — a burning floor heats the one above until it lights."
+            ? scenario.frame === "strut"
+              ? "Beams expand. The girder walks off the seat at column 79. Then that strut has nothing to lean on."
+              : "Fire walks one story at a time — a burning floor heats the one above until it lights."
             : scenario.shape === "bonfire"
               ? "Neighbor heat: a burning log warms what it touches (~0.2 m), and fire rises. When a neighbor hits ignition temp, it lights."
             : scenario.shape === "apartment"
@@ -440,6 +443,7 @@ function ControlBar({
   snap,
   wood,
   speed,
+  heatMax,
   onPlay,
   onReset,
   onSpeed,
@@ -449,6 +453,7 @@ function ControlBar({
   snap: SimSnapshot | null;
   wood: boolean;
   speed: number;
+  heatMax: number;
   onPlay: () => void;
   onReset: () => void;
   onSpeed: (v: number) => void;
@@ -474,7 +479,7 @@ function ControlBar({
         <label className="flex min-w-48 min-h-11 flex-1 items-center gap-3">
           <span
             className="shrink-0 cursor-help font-mono text-2xs uppercase tracking-wider text-muted"
-            title="Heating time-scale only. Gravity and collapse always run at 1×. 8× means fire walks eight times faster than the clock."
+            title="Heating time-scale only. Gravity and collapse always run at 1×. WTC 7 burned for 7 hours — that slider goes to 2400×."
           >
             Fire Speed
           </span>
@@ -482,7 +487,7 @@ function ControlBar({
             className="lab-range flex-1"
             type="range"
             min={1}
-            max={240}
+            max={heatMax}
             step={1}
             value={speed}
             onChange={(e) => onSpeed(Number(e.target.value))}
@@ -669,7 +674,7 @@ function Telemetry({ snap, scenario }: { snap: SimSnapshot | null; scenario: Sce
       </dl>
       <div className="mt-3 grid grid-cols-4 gap-2 font-mono text-2xs tabular-nums">
         <FaceStat
-          label={scenario.shape === "bonfire" ? "Kerosene" : scenario.hasPlane ? "Hit" : scenario.shape === "house" ? "Tree" : scenario.shape === "tower" ? "Fire" : "Fire"}
+          label={scenario.shape === "bonfire" ? "Kerosene" : scenario.hasPlane ? "Hit" : scenario.shape === "house" ? "Tree" : scenario.frame === "strut" ? "Col 79" : scenario.shape === "tower" ? "Fire" : "Fire"}
           hint={
             scenario.shape === "bonfire"
               ? "The corner the match was put to. Temperature and remaining wood strength on that face of the pile."
@@ -677,50 +682,72 @@ function Telemetry({ snap, scenario }: { snap: SimSnapshot | null; scenario: Sce
                 ? "Inbound face the aircraft hit. Temperature and remaining yield of those columns."
                 : scenario.shape === "house"
                   ? "The Christmas tree. Dry tree, one match. Temperature and remaining wood of that corner of the room."
-                  : scenario.shape === "tower"
+                  : scenario.frame === "strut"
+                    ? "Column 79. The east interior strut. Girder sits on a seat here until the beams expand."
+                    : scenario.shape === "tower"
                     ? "Lower floors that started on fire. No airplane. Temperature and remaining yield of those columns."
                     : "The room that was ignited. Temperature and remaining wood strength."
           }
           face={f.impact}
         />
         <FaceStat
-          label="Sides"
-          hint="The two faces adjacent to the fire. If these heat, fire is walking sideways."
+          label={scenario.frame === "strut" ? "80 / 81" : "Sides"}
+          hint={
+            scenario.frame === "strut"
+              ? "The other east interior struts. They only share load with 79 through the floors."
+              : "The two faces adjacent to the fire. If these heat, fire is walking sideways."
+          }
           face={f.sides}
         />
         <FaceStat
-          label={snap.world === "pieces" ? "Mid" : "Core"}
+          label={scenario.frame === "strut" ? "West" : snap.world === "pieces" ? "Mid" : "Core"}
           hint={
-            snap.world === "pieces"
-              ? "The middle of the pile or the house. Fire should arrive here after the tree, then the couch."
-              : "The core columns. The jet punched these too. Elevator shafts also carry heat upward."
+            scenario.frame === "strut"
+              ? "West interior. Fails after 79–81, when the floors that tied the frame together are gone."
+              : snap.world === "pieces"
+                ? "The middle of the pile or the house. Fire should arrive here after the tree, then the couch."
+                : "The core columns. The jet punched these too. Elevator shafts also carry heat upward."
           }
           face={f.core}
         />
         <FaceStat
-          label="Far"
-          hint="The face opposite ignition. If this heats, fire walked. It was not hit."
+          label={scenario.frame === "strut" ? "Shell" : "Far"}
+          hint={
+            scenario.frame === "strut"
+              ? "Perimeter moment frame. Still a building until the interior is gone."
+              : "The face opposite ignition. If this heats, fire walked. It was not hit."
+          }
           face={f.opposite}
         />
       </div>
       <div className="mt-3 space-y-2">
         <CapBar
-          label="Fire side"
-          hint="Remaining axial capacity of the columns on the fire face, as a fraction of design. Below 1.0 they cannot carry the stories above."
+          label={scenario.frame === "strut" ? "Column 79" : "Fire side"}
+          hint={
+            scenario.frame === "strut"
+              ? "Remaining capacity of column 79. Drops when floors stop bracing it — Euler, not melt."
+              : "Remaining axial capacity of the columns on the fire face, as a fraction of design. Below 1.0 they cannot carry the stories above."
+          }
           value={snap.leftCap}
         />
         <CapBar
-          label={snap.world === "pieces" ? "Middle" : "Core"}
+          label={scenario.frame === "strut" ? "80 / 81" : snap.world === "pieces" ? "Middle" : "Core"}
           hint={
-            snap.world === "pieces"
-              ? "Remaining strength of the members in the middle of the structure."
-              : "Remaining axial capacity of the core, as a fraction of design. About half the tower’s gravity load sits here."
+            scenario.frame === "strut"
+              ? "East interior neighbors. Loose coupling: they pick up 79's load only if the floors are still there."
+              : snap.world === "pieces"
+                ? "Remaining strength of the members in the middle of the structure."
+                : "Remaining axial capacity of the core, as a fraction of design. About half the tower’s gravity load sits here."
           }
           value={snap.coreCap}
         />
         <CapBar
-          label="Far side"
-          hint="Remaining capacity of the untouched face. If this stays high while the fire side drops, Center Gravity walks a few metres — still inside a 63 m square."
+          label={scenario.frame === "strut" ? "Shell" : "Far side"}
+          hint={
+            scenario.frame === "strut"
+              ? "Perimeter moment frame. Cannot carry 47 stories once the interior struts are gone."
+              : "Remaining capacity of the untouched face. If this stays high while the fire side drops, Center Gravity walks a few metres — still inside a 63 m square."
+          }
           value={snap.rightCap}
         />
       </div>

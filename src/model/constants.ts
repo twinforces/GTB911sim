@@ -20,6 +20,8 @@ export const G = 9.81;
 
 /** Euler step, seconds of *wall clock*. Heating may consume speed × this; falling does not. */
 export const STEP = 1 / 60;
+/** Fire Speed ceiling for tube / wood runs. Strut (WTC 7) uses MAX_HEAT_STRUT. */
+export const MAX_HEAT = 240;
 
 export const FLOORS = 110;
 export const FLOOR_H = 3.66; // m, typical WTC story

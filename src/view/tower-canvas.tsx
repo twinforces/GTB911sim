@@ -103,6 +103,8 @@ export function TowerCanvas({ vmRef, snap, onSnap, className }: Props) {
       world.dispose();
       worldRef.current = null;
     };
+    // WORLD3D_REV remounts the canvas on HMR when the World3D constructor changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- imported constant, not a hook value
   }, [vmRef, WORLD3D_REV]);
 
   const bubbles = snap?.bubbles ?? [];
@@ -125,7 +127,7 @@ export function TowerCanvas({ vmRef, snap, onSnap, className }: Props) {
           <StatusBubble key={b.id} bubble={b} pane={zoomPane.current} world={worldRef.current} />
         ))}
       </Pane>
-      <Pane label="Top" slotRef={topSlot} dataPane="top" />
+      <Pane label={snap?.frame === "strut" ? "Col 79" : "Top"} slotRef={topSlot} dataPane="top" />
       {!ready ? (
         <div className="absolute inset-0 z-20 flex items-center justify-center bg-sky/90">
           <div className="w-64 space-y-3 rounded-md bg-surface px-4 py-4 text-center shadow-border">

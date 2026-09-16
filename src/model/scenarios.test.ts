@@ -46,6 +46,7 @@ describe("claim runs", () => {
     assert.equal(s.noFire, false);
     assert.equal(s.floors, 47);
     assert.equal(s.crush, true);
+    assert.equal(s.frame, "strut");
     assert.ok(s.impactIntact.every((v) => v === 1), "no airplane gash");
     assert.equal(scenarioById("south").nextId, "wtc7");
   });

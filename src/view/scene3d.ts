@@ -15,7 +15,7 @@ import type { Piece } from "@/model/types";
 import { woodRgb } from "@/model/wood";
 
 /** Bump when World3D constructor changes so the canvas remounts (HMR). */
-export const WORLD3D_REV = 10;
+export const WORLD3D_REV = 12;
 
 export interface PaneRect {
   x: number;
@@ -397,6 +397,7 @@ export class World3D {
 	camIso: THREE.PerspectiveCamera;
 	camZoom: THREE.PerspectiveCamera;
 	camTop: THREE.OrthographicCamera;
+	camBay: THREE.PerspectiveCamera;
 	ready = false;
 	private floorMesh: THREE.InstancedMesh | null = null;
 	private pieceGroup = new THREE.Group();
@@ -458,6 +459,13 @@ export class World3D {
 	private aptEdgeMat: THREE.MeshStandardMaterial;
 	private plasterMat: THREE.MeshStandardMaterial;
 	private aptMode = false;
+	private frameGroup = new THREE.Group();
+	private strutCols: THREE.InstancedMesh | null = null;
+	private strutGirders: THREE.InstancedMesh | null = null;
+	private strutEast: THREE.InstancedMesh | null = null;
+	private strutWindows: THREE.InstancedMesh | null = null;
+	private strutPenthouse: THREE.Mesh | null = null;
+	private strutSeat: THREE.Mesh | null = null;
 	constructor(canvas: HTMLCanvasElement) {
 		this.renderer = new THREE.WebGLRenderer({
 			canvas,
@@ -477,6 +485,8 @@ export class World3D {
 		this.camIso = new THREE.PerspectiveCamera(34, 1, .2, 4e3);
 		this.camZoom = new THREE.PerspectiveCamera(48, 1, .12, 2e3);
 		this.camTop = new THREE.OrthographicCamera(-10, 10, 10, -10, .2, 2e3);
+		this.camBay = new THREE.PerspectiveCamera(50, 1, .15, 400);
+		this.scene.add(this.frameGroup);
 		this.scene.add(new THREE.HemisphereLight(0xb8d4f0, 0x5a7048, 1.45));
 		const sun = new THREE.DirectionalLight(0xfff1d0, 1.35);
 		sun.position.set(-40, 80, 55);
@@ -701,6 +711,7 @@ export class World3D {
 		if (this.builtKey === key && this.lastN === nFloors) return;
 		this.builtKey = key;
 		this.lastN = nFloors;
+		this.clearStrut();
 		if (this.floorMesh) {
 			this.scene.remove(this.floorMesh);
 			this.floorMesh.dispose();
@@ -724,7 +735,11 @@ export class World3D {
 		if (engine.pit) this.buildPit(engine);
 		else this.buildPlaza(engine, cx, W, H);
 		if (nFloors > 0) {
-			const geo = new THREE.BoxGeometry(W * .98, engine.floorH * .92, W * .98);
+			const strut = engine.scenario.frame === "strut";
+			const depth = strut ? W * 0.52 : W * 0.98;
+			const slabW = strut ? W * 0.62 : W * 0.98;
+			const slabH = strut ? engine.floorH * 0.16 : engine.floorH * 0.92;
+			const geo = new THREE.BoxGeometry(slabW, slabH, depth);
 			const mat = new THREE.MeshStandardMaterial({
 				map: this.towerFacadeMap,
 				roughness: .48,
@@ -734,7 +749,7 @@ export class World3D {
 			this.floorMesh = new THREE.InstancedMesh(geo, mat, nFloors);
 			this.floorMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
 			this.scene.add(this.floorMesh);
-			const ghostGeo = new THREE.EdgesGeometry(new THREE.BoxGeometry(W, H, W));
+			const ghostGeo = new THREE.EdgesGeometry(new THREE.BoxGeometry(W, H, strut ? W * 0.52 : W));
 			this.ghost = new THREE.LineSegments(ghostGeo, new THREE.LineDashedMaterial({
 				color: 0xecebe6,
 				dashSize: 4,
@@ -746,6 +761,7 @@ export class World3D {
 			this.ghost.computeLineDistances();
 			this.ghost.visible = false;
 			this.scene.add(this.ghost);
+			if (strut) this.buildStrut(engine);
 		}
 	}
 	private buildPit(engine: SimEngine): void {
@@ -1118,6 +1134,141 @@ export class World3D {
 		}
 		for (const [id, m] of this.pieceMap) if (!seen.has(id)) m.visible = false;
 	}
+	private clearStrut(): void {
+		this.frameGroup.clear();
+		for (const m of [this.strutCols, this.strutGirders, this.strutEast, this.strutWindows]) {
+			if (m) (m.material as THREE.Material).dispose();
+		}
+		if (this.strutPenthouse) (this.strutPenthouse.material as THREE.Material).dispose();
+		if (this.strutSeat) (this.strutSeat.material as THREE.Material).dispose();
+		this.strutCols = null;
+		this.strutGirders = null;
+		this.strutEast = null;
+		this.strutWindows = null;
+		this.strutPenthouse = null;
+		this.strutSeat = null;
+	}
+	private buildStrut(engine: SimEngine): void {
+		const n = engine.floors.length;
+		const colMat = new THREE.MeshStandardMaterial({ color: 0x4a5560, roughness: 0.45, metalness: 0.55 });
+		this.strutCols = new THREE.InstancedMesh(this.boxGeo, colMat, n * 3);
+		this.strutCols.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+		this.frameGroup.add(this.strutCols);
+		const girdMat = new THREE.MeshStandardMaterial({ color: 0x6a5340, roughness: 0.5, metalness: 0.4 });
+		this.strutGirders = new THREE.InstancedMesh(this.boxGeo, girdMat, n);
+		this.strutGirders.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+		this.frameGroup.add(this.strutGirders);
+		const slabMat = new THREE.MeshStandardMaterial({ color: 0x8a8680, roughness: 0.7, metalness: 0.15 });
+		this.strutEast = new THREE.InstancedMesh(this.boxGeo, slabMat, n);
+		this.strutEast.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+		this.frameGroup.add(this.strutEast);
+		const winMat = new THREE.MeshStandardMaterial({
+			color: 0x7ec8e8,
+			roughness: 0.2,
+			metalness: 0.6,
+			transparent: true,
+			opacity: 0.55,
+		});
+		this.strutWindows = new THREE.InstancedMesh(this.boxGeo, winMat, n * 8);
+		this.strutWindows.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+		this.frameGroup.add(this.strutWindows);
+		this.strutPenthouse = new THREE.Mesh(
+			this.boxGeo,
+			new THREE.MeshStandardMaterial({ color: 0x5c6570, roughness: 0.5, metalness: 0.35 }),
+		);
+		this.frameGroup.add(this.strutPenthouse);
+		this.strutSeat = new THREE.Mesh(
+			this.boxGeo,
+			new THREE.MeshStandardMaterial({ color: 0xb08a4a, roughness: 0.4, metalness: 0.5 }),
+		);
+		this.frameGroup.add(this.strutSeat);
+	}
+	private syncStrut(engine: SimEngine): void {
+		if (engine.scenario.frame !== "strut" || !this.strutCols || !this.strutEast || !this.strutGirders || !this.strutWindows) {
+			this.frameGroup.visible = false;
+			return;
+		}
+		this.frameGroup.visible = true;
+		const W = engine.width;
+		const H = engine.floorH;
+		const D = W * 0.52;
+		const n = engine.floors.length;
+		const xs = [0.26 * W, 0.28 * W, 0.26 * W];
+		const zs = [0.16 * D, 0, -0.16 * D];
+		const color = new THREE.Color();
+		if (!this.strutCols.instanceColor) {
+			this.strutCols.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(n * 3 * 3), 3);
+		}
+		let crushedRank = 0;
+		for (let i = 0; i < n; i++) {
+			const f = engine.floors[i];
+			const rank = f.state === "crushed" ? crushedRank : 0;
+			if (f.state === "crushed") crushedRank += 1;
+			const tf = floorTransform(engine, i, rank);
+			const y = tf.y + tf.h * 0.5;
+			const dx = tf.x - W / 2;
+			const crushed = f.state === "crushed";
+			for (let c = 0; c < 3; c++) {
+				const idx = i * 3 + c;
+				const failed = f.cols[c].failed || crushed;
+				const bow = failed ? 0.7 : f.cols[c].bow * 0.2;
+				this.dummy.position.set(xs[c] + dx + bow * (c === 0 ? 1.2 : 0.3), y, zs[c]);
+				this.dummy.rotation.set(failed ? 0.22 : 0, 0, -tf.theta + (failed ? 0.45 : 0));
+				this.dummy.scale.set(crushed ? 1.5 : 1.15, Math.max(0.16, tf.h * (crushed ? 0.5 : 0.92)), crushed ? 1.5 : 1.15);
+				this.dummy.updateMatrix();
+				this.strutCols.setMatrixAt(idx, this.dummy.matrix);
+				const steel = steelRgb(f.cols[c].temp);
+				color.setRGB(steel[0] / 255, steel[1] / 255, steel[2] / 255);
+				this.strutCols.setColorAt(idx, color);
+			}
+			const walk = f.eastSeated ? Math.min(f.eastWalk * 4, 0.4) : 1.6 + Math.min(2.2, f.eastWalk);
+			const gy = f.eastDropped && f.state === "stacked" ? y + f.eastY : y;
+			this.dummy.position.set(xs[0] + dx + walk, gy, zs[0] + D * 0.14);
+			this.dummy.rotation.set(0, 0, -tf.theta + (f.eastDropped || crushed ? 0.4 : 0));
+			const showG = i >= 6 && i <= 14 && !crushed;
+			this.dummy.scale.set(showG ? 0.45 : 0.01, showG ? 0.28 : 0.01, showG ? D * 0.32 : 0.01);
+			this.dummy.updateMatrix();
+			this.strutGirders.setMatrixAt(i, this.dummy.matrix);
+			this.dummy.position.set(W * 0.16 + dx, gy, 0);
+			this.dummy.rotation.set(0, 0, -tf.theta + (f.eastDropped || crushed ? 0.12 : 0));
+			this.dummy.scale.set(W * 0.3, Math.max(0.12, tf.h * 0.12), D * 0.48);
+			this.dummy.updateMatrix();
+			this.strutEast.setMatrixAt(i, this.dummy.matrix);
+			for (let w = 0; w < 8; w++) {
+				const widx = i * 8 + w;
+				const blown = f.windowBlown || crushed || f.state === "block";
+				this.dummy.position.set(W * (0.12 + w * 0.1) + dx, y, D * 0.5 + 0.08);
+				this.dummy.rotation.set(0, 0, -tf.theta);
+				this.dummy.scale.set(blown ? 0.01 : W * 0.07, blown ? 0.01 : Math.max(0.2, tf.h * 0.55), blown ? 0.01 : 0.08);
+				this.dummy.updateMatrix();
+				this.strutWindows.setMatrixAt(widx, this.dummy.matrix);
+			}
+		}
+		this.strutCols.instanceMatrix.needsUpdate = true;
+		if (this.strutCols.instanceColor) this.strutCols.instanceColor.needsUpdate = true;
+		this.strutGirders.instanceMatrix.needsUpdate = true;
+		this.strutEast.instanceMatrix.needsUpdate = true;
+		this.strutWindows.instanceMatrix.needsUpdate = true;
+		if (this.strutPenthouse) {
+			const top = floorTransform(engine, n - 1, 0);
+			const falling = engine.penthouseDropped && engine.phase === "fire";
+			this.strutPenthouse.position.set(
+				W * 0.28 + (top.x - W / 2),
+				falling ? engine.penthouseY : top.y + top.h + 1.6,
+				D * 0.12,
+			);
+			this.strutPenthouse.scale.set(9, 3.6, 8);
+			this.strutPenthouse.rotation.z = falling || engine.phase !== "fire" ? 0.25 - top.theta : 0;
+			this.strutPenthouse.visible = engine.phase !== "settled";
+		}
+		if (this.strutSeat) {
+			const f13 = engine.floors[12];
+			const tf13 = f13 ? floorTransform(engine, 12, 0) : null;
+			this.strutSeat.position.set(xs[0] - 0.7, tf13 ? tf13.y + tf13.h * 0.5 : 13 * H, zs[0]);
+			this.strutSeat.scale.set(1.6, 0.18, 1.4);
+			this.strutSeat.visible = Boolean(f13 && f13.eastSeated && engine.phase === "fire");
+		}
+	}
 	private syncFloors(engine: SimEngine): void {
 		const mesh = this.floorMesh;
 		if (!mesh) return;
@@ -1131,7 +1282,8 @@ export class World3D {
 			const rank = f.state === "crushed" ? crushedRank : 0;
 			if (f.state === "crushed") crushedRank += 1;
 			const tf = floorTransform(engine, i, rank);
-			this.dummy.position.set(tf.x, tf.y + tf.h * .5, 0);
+			const strut = engine.scenario.frame === "strut";
+			this.dummy.position.set(tf.x + (strut ? engine.width * 0.18 : 0), tf.y + tf.h * .5, 0);
 			this.dummy.rotation.set(0, 0, -tf.theta);
 			this.dummy.scale.set(1, Math.max(.12, tf.h / H), 1);
 			this.dummy.updateMatrix();
@@ -1145,7 +1297,10 @@ export class World3D {
 		}
 		mesh.instanceMatrix.needsUpdate = true;
 		if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
-		if (this.ghost) this.ghost.visible = engine.phase === "collapse" || engine.phase === "settled";
+		if (this.ghost) {
+			this.ghost.visible =
+				engine.scenario.frame !== "strut" && (engine.phase === "collapse" || engine.phase === "settled");
+		}
 		const top = engine.floors[n - 1];
 		if (engine.scenario.hasAntenna && top && top.state !== "crushed") {
 			const tf = floorTransform(engine, n - 1, 0);
@@ -1459,6 +1614,20 @@ export class World3D {
 		this.camTop.far = Math.max(50, H * 3.2);
 		this.camTop.userData.halfW = topHalf;
 		this.camTop.userData.halfH = topHalf;
+		if (engine.scenario.frame === "strut") {
+			const D = W * 0.52;
+			let focus = 13;
+			for (let i = 6; i <= 14 && i < engine.floors.length; i++) {
+				if (engine.floors[i].eastDropped || engine.floors[i].cols[0].temp > 200) focus = i + 1;
+			}
+			const y = focus * engine.floorH;
+			this.camBay.fov = 48;
+			this.camBay.near = 0.25;
+			this.camBay.far = Math.max(80, W * 3);
+			this.camBay.up.set(0, 1, 0);
+			this.camBay.position.set(W * 0.05, y + 1.1, D * 0.02);
+			this.camBay.lookAt(W * 0.26, y - 0.2, D * 0.16);
+		}
 	}
 	project(wx: number, wy: number, pane: PaneRect, which: "front" | "iso" | "zoom" | "top"): { x: number; y: number } {
 		const cam = which === "front" ? this.camFront : which === "iso" ? this.camIso : which === "zoom" ? this.camZoom : this.camTop;
@@ -1473,6 +1642,7 @@ export class World3D {
 		this.rebuild(engine);
 		this.syncPieces(engine);
 		this.syncFloors(engine);
+		this.syncStrut(engine);
 		this.syncParticles(engine);
 		this.syncCgrav(engine);
 		this.placeCameras(engine, timeSec);
@@ -1484,7 +1654,7 @@ export class World3D {
 		this.drawPane(this.camFront, panes.front, cssH);
 		this.drawPane(this.camIso, panes.iso, cssH);
 		this.drawPane(this.camZoom, panes.zoom, cssH);
-		this.drawPane(this.camTop, panes.top, cssH);
+		this.drawPane(engine.scenario.frame === "strut" ? this.camBay : this.camTop, panes.top, cssH);
 		this.ready = true;
 	}
 	private drawPane(cam: THREE.Camera, pane: PaneRect, cssH: number): void {
@@ -1514,6 +1684,7 @@ export class World3D {
 		this.renderer.render(this.scene, cam);
 	}
 	dispose(): void {
+		this.clearStrut();
 		this.renderer.dispose();
 		this.logQuarterGeo.dispose();
 		this.logGeo.dispose();
